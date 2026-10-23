@@ -1,0 +1,4204 @@
+========== PACKAGE.JSON ==========
+========== APP.TSX ==========
+import { HashRouter, Route, Routes, useLocation } from "react-router-dom";
+import { useEffect } from "react";
+import { StoreProvider, useStore } from "@/context/Store";
+import { cn } from "@/utils/cn";
+import { Header, MobileMenu } from "@/components/Header";
+import { Footer } from "@/components/Footer";
+import { Overlays } from "@/components/Overlays";
+import Home from "@/pages/Home";
+import { CheckoutPage, CollectionPage, ProductPage, SearchPage } from "@/pages/Shop";
+import {
+  AboutPage,
+  AccountPage,
+  BlogPage,
+  CollectionsIndex,
+  ComparePage,
+  ContactPage,
+  FaqPage,
+  FeaturesPage,
+  NotFound,
+  PoliciesPage,
+  PostPage,
+  QuickOrderPage,
+  StoresPage,
+  WishlistPage,
+} from "@/pages/Info";
+
+function Scroll() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
+
+function Shell() {
+  const { compare } = useStore();
+  return (
+    <div className={cn("min-h-screen overflow-x-hidden bg-white text-[#111]", compare.length > 0 && "pb-24")}>
+      <Scroll />
+      <Header />
+      <MobileMenu />
+      <main>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/collections/:handle" element={<CollectionPage />} />
+          <Route path="/products/:handle" element={<ProductPage />} />
+          <Route path="/search" element={<SearchPage />} />
+          <Route path="/checkout" element={<CheckoutPage />} />
+          <Route path="/account" element={<AccountPage />} />
+          <Route path="/pages/about" element={<AboutPage />} />
+          <Route path="/pages/contact" element={<ContactPage />} />
+          <Route path="/pages/faqs" element={<FaqPage />} />
+          <Route path="/pages/find-a-store" element={<StoresPage />} />
+          <Route path="/pages/blog" element={<BlogPage />} />
+          <Route path="/pages/blog/:slug" element={<PostPage />} />
+          <Route path="/pages/theme-features" element={<FeaturesPage />} />
+          <Route path="/pages/compare" element={<ComparePage />} />
+          <Route path="/pages/wishlist" element={<WishlistPage />} />
+          <Route path="/pages/policies" element={<PoliciesPage />} />
+          <Route path="/pages/quick-order" element={<QuickOrderPage />} />
+          <Route path="/pages/collections" element={<CollectionsIndex />} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </main>
+      <Footer />
+      <Overlays />
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <StoreProvider>
+      <HashRouter>
+        <Shell />
+      </HashRouter>
+    </StoreProvider>
+  );
+}
+========== STORE CONTEXT ==========
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import { getProduct, type Product } from "@/data/catalog";
+
+export type CartLine = { handle: string; variantId: number; qty: number };
+
+type Persisted = {
+  cart: CartLine[];
+  wishlist: string[];
+  compare: string[];
+  currency: string;
+  code: string | null;
+  user: { name: string; email: string } | null;
+};
+
+type Store = Persisted & {
+  cartOpen: boolean;
+  searchOpen: boolean;
+  quick: string | null;
+  menuOpen: boolean;
+  toast: string | null;
+  offersOpen: boolean;
+  setCartOpen: (v: boolean) => void;
+  setSearchOpen: (v: boolean) => void;
+  setQuick: (h: string | null) => void;
+  setMenuOpen: (v: boolean) => void;
+  setOffersOpen: (v: boolean) => void;
+  setCurrency: (c: string) => void;
+  notify: (m: string) => void;
+  add: (handle: string, variantId: number, qty?: number) => void;
+  setQty: (variantId: number, qty: number) => void;
+  remove: (variantId: number) => void;
+  clearCart: () => void;
+  toggleWish: (handle: string) => void;
+  wished: (handle: string) => boolean;
+  toggleCompare: (handle: string) => void;
+  clearCompare: () => void;
+  applyCode: (code: string) => boolean;
+  clearCode: () => void;
+  signIn: (name: string, email: string) => void;
+  signOut: () => void;
+  count: number;
+  subtotal: number;
+  discount: number;
+  total: number;
+};
+
+const KEY = "garace-hyper-v1";
+const Ctx = createContext<Store | null>(null);
+
+function load(): Persisted {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) {
+      const p = JSON.parse(raw) as Persisted;
+      return {
+        cart: p.cart ?? [],
+        wishlist: p.wishlist ?? [],
+        compare: p.compare ?? [],
+        currency: p.currency ?? "USD",
+        code: p.code ?? null,
+        user: p.user ?? null,
+      };
+    }
+  } catch {
+    /* ignore */
+  }
+  return { cart: [], wishlist: [], compare: [], currency: "USD", code: null, user: null };
+}
+
+export function linePrice(line: CartLine) {
+  const p = getProduct(line.handle);
+  const v = p?.variants.find((x) => x.id === line.variantId) ?? p?.variants[0];
+  return v ? v.price * line.qty : 0;
+}
+
+export function volumeRate(qty: number) {
+  if (qty >= 10) return 0.1;
+  if (qty >= 5) return 0.05;
+  return 0;
+}
+
+export function StoreProvider({ children }: { children: ReactNode }) {
+  const [persisted, setPersisted] = useState<Persisted>(load);
+  const [cartOpen, setCartOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [quick, setQuick] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [offersOpen, setOffersOpen] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem(KEY, JSON.stringify(persisted));
+  }, [persisted]);
+
+  const notify = useCallback((m: string) => {
+    setToast(m);
+    window.setTimeout(() => setToast(null), 2400);
+  }, []);
+
+  const add = useCallback(
+    (handle: string, variantId: number, qty = 1) => {
+      const p = getProduct(handle);
+      const v = p?.variants.find((x) => x.id === variantId);
+      if (!p || !v || !v.available || p.tags.includes("Coming Soon") || p.stock === 0) {
+        notify("This piece is not available to add right now.");
+        return;
+      }
+      setPersisted((s) => {
+        const i = s.cart.findIndex((l) => l.variantId === variantId);
+        const cart = [...s.cart];
+        if (i >= 0) cart[i] = { ...cart[i], qty: cart[i].qty + qty };
+        else cart.push({ handle, variantId, qty });
+        return { ...s, cart };
+      });
+      setCartOpen(true);
+      notify(`${p.title} added to cart`);
+    },
+    [notify],
+  );
+
+  const setQty = useCallback((variantId: number, qty: number) => {
+    setPersisted((s) => ({
+      ...s,
+      cart:
+        qty <= 0
+          ? s.cart.filter((l) => l.variantId !== variantId)
+          : s.cart.map((l) => (l.variantId === variantId ? { ...l, qty } : l)),
+    }));
+  }, []);
+
+  const remove = useCallback((variantId: number) => setQty(variantId, 0), [setQty]);
+  const clearCart = useCallback(() => setPersisted((s) => ({ ...s, cart: [], code: null })), []);
+
+  const toggleWish = useCallback(
+    (handle: string) => {
+      setPersisted((s) => {
+        const has = s.wishlist.includes(handle);
+        return {
+          ...s,
+          wishlist: has ? s.wishlist.filter((h) => h !== handle) : [...s.wishlist, handle],
+        };
+      });
+      const p = getProduct(handle);
+      notify(
+        persisted.wishlist.includes(handle)
+          ? "Removed from wishlist"
+          : `${p?.title ?? "Piece"} saved`,
+      );
+    },
+    [notify, persisted.wishlist],
+  );
+
+  const wished = useCallback(
+    (handle: string) => persisted.wishlist.includes(handle),
+    [persisted.wishlist],
+  );
+
+  const toggleCompare = useCallback(
+    (handle: string) => {
+      setPersisted((s) => {
+        if (s.compare.includes(handle)) return { ...s, compare: s.compare.filter((h) => h !== handle) };
+        if (s.compare.length >= 5) return s;
+        return { ...s, compare: [...s.compare, handle] };
+      });
+    },
+    [],
+  );
+
+  const clearCompare = useCallback(() => setPersisted((s) => ({ ...s, compare: [] })), []);
+
+  const applyCode = useCallback(
+    (code: string) => {
+      const c = code.trim().toUpperCase();
+      if (c === "FLASH30" || c === "WELCOME10") {
+        setPersisted((s) => ({ ...s, code: c }));
+        notify(`Code ${c} applied`);
+        return true;
+      }
+      notify("That code is not recognized");
+      return false;
+    },
+    [notify],
+  );
+
+  const clearCode = useCallback(() => setPersisted((s) => ({ ...s, code: null })), []);
+  const setCurrency = useCallback(
+    (currency: string) => setPersisted((s) => ({ ...s, currency })),
+    [],
+  );
+  const signIn = useCallback((name: string, email: string) => {
+    setPersisted((s) => ({ ...s, user: { name, email } }));
+    notify(`Welcome, ${name.split(" ")[0]}`);
+  }, [notify]);
+  const signOut = useCallback(() => setPersisted((s) => ({ ...s, user: null })), []);
+
+  const subtotal = persisted.cart.reduce((n, l) => n + linePrice(l), 0);
+  const volumeOff = persisted.cart.reduce((n, l) => n + linePrice(l) * volumeRate(l.qty), 0);
+  const codeRate = persisted.code === "FLASH30" ? 0.3 : persisted.code === "WELCOME10" ? 0.1 : 0;
+  const discount = volumeOff + (subtotal - volumeOff) * codeRate;
+  const total = Math.max(0, subtotal - discount);
+  const count = persisted.cart.reduce((n, l) => n + l.qty, 0);
+
+  const value = useMemo<Store>(
+    () => ({
+      ...persisted,
+      cartOpen,
+      searchOpen,
+      quick,
+      menuOpen,
+      toast,
+      offersOpen,
+      setCartOpen,
+      setSearchOpen,
+      setQuick,
+      setMenuOpen,
+      setOffersOpen,
+      setCurrency,
+      notify,
+      add,
+      setQty,
+      remove,
+      clearCart,
+      toggleWish,
+      wished,
+      toggleCompare,
+      clearCompare,
+      applyCode,
+      clearCode,
+      signIn,
+      signOut,
+      count,
+      subtotal,
+      discount,
+      total,
+    }),
+    [
+      persisted,
+      cartOpen,
+      searchOpen,
+      quick,
+      menuOpen,
+      toast,
+      offersOpen,
+      setCurrency,
+      notify,
+      add,
+      setQty,
+      remove,
+      clearCart,
+      toggleWish,
+      wished,
+      toggleCompare,
+      clearCompare,
+      applyCode,
+      clearCode,
+      signIn,
+      signOut,
+      count,
+      subtotal,
+      discount,
+      total,
+    ],
+  );
+
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+export function useStore() {
+  const v = useContext(Ctx);
+  if (!v) throw new Error("store");
+  return v;
+}
+
+export function useMoney() {
+  const { currency } = useStore();
+  return currency;
+}
+
+export type { Product };
+========== HEADER ==========
+import { useEffect, useState, type FormEvent } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import {
+  CURRENCIES,
+  LOGO,
+  categoryColumns,
+  featureLinks,
+  file,
+  getProduct,
+  img,
+  pageLinks,
+  products,
+  rooms,
+  searchTypes,
+} from "@/data/catalog";
+import { useStore } from "@/context/Store";
+import { Bag, Caret, CloseIcon, Heart, SearchIcon, Social, UserIcon } from "./ui";
+import { cn } from "@/utils/cn";
+
+const trending = ["arc-chair", "feast-chair", "bar-chair-sand", "swivel-table", "etruscan-jug-copy", "beam-table"]
+  .map((h) => getProduct(h))
+  .filter((p): p is NonNullable<typeof p> => Boolean(p));
+
+export function Header() {
+  const store = useStore();
+  const nav = useNavigate();
+  const [q, setQ] = useState("");
+  const [cat, setCat] = useState("All Categories");
+  const [focus, setFocus] = useState(false);
+  const [open, setOpen] = useState<string | null>(null);
+  const [room, setRoom] = useState(rooms[0].label);
+  const [curOpen, setCurOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  const results = products
+    .filter((p) => (cat === "All Categories" ? true : p.type === cat || p.type.startsWith(cat.replace(/s$/, ""))))
+    .filter((p) => !q.trim() || `${p.title} ${p.type} ${p.tags.join(" ")}`.toLowerCase().includes(q.toLowerCase()))
+    .slice(0, 6);
+
+  const goSearch = (e?: FormEvent) => {
+    e?.preventDefault();
+    setFocus(false);
+    nav(`/search?q=${encodeURIComponent(q)}&type=${encodeURIComponent(cat)}`);
+  };
+
+  const currency = CURRENCIES.find((c) => c.code === store.currency) ?? CURRENCIES[0];
+
+  return (
+    <header className={cn("sticky top-0 z-40 bg-white", scrolled && "shadow-[0_1px_0_#eee]")}>
+      {focus ? (
+        <button type="button" aria-label="Close search suggestions" className="fixed inset-0 z-30 cursor-default" onClick={() => setFocus(false)} />
+      ) : null}
+      <div className="bg-[#1d349a] text-white">
+        <div className="mx-auto grid h-11 max-w-[1680px] grid-cols-1 items-center px-4 text-[13px] sm:px-6 lg:grid-cols-3 lg:px-10">
+          <div className="hidden items-center gap-5 lg:flex">
+            <Link to="/pages/faqs" className="hover:underline">
+              Help Center
+            </Link>
+            <Link to="/pages/find-a-store" className="hover:underline">
+              Find a Store
+            </Link>
+            <Link to="/pages/contact" className="hover:underline">
+              Contact
+            </Link>
+          </div>
+          <p className="text-center font-semibold">✌️ Free Express Shipping on orders $500!</p>
+          <div className="hidden items-center justify-end gap-4 lg:flex">
+            <div className="relative">
+              <button type="button" className="inline-flex items-center gap-1 font-semibold" onClick={() => setCurOpen((v) => !v)}>
+                {currency.label} ({currency.code} {currency.symbol.trim()})
+                <Caret />
+              </button>
+              {curOpen ? (
+                <div className="absolute right-0 top-8 z-50 max-h-72 w-64 overflow-auto rounded-2xl bg-white py-2 text-black shadow-2xl">
+                  {CURRENCIES.map((c) => (
+                    <button
+                      key={c.code}
+                      type="button"
+                      className="block w-full px-4 py-2 text-left text-sm hover:bg-[#f5f5f5]"
+                      onClick={() => {
+                        store.setCurrency(c.code);
+                        setCurOpen(false);
+                      }}
+                    >
+                      {c.label} ({c.code} {c.symbol.trim()})
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            <Social light />
+          </div>
+        </div>
+      </div>
+
+      <div className="mx-auto flex max-w-[1680px] items-center gap-4 px-4 py-3 sm:px-6 lg:gap-8 lg:px-10">
+        <button type="button" className="lg:hidden" aria-label="Menu" onClick={() => store.setMenuOpen(true)}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <path d="M4 7h16M4 12h16M4 17h16" />
+          </svg>
+        </button>
+        <Link to="/" className="shrink-0" aria-label="Garace home">
+          <img src={LOGO} alt="GARACE" className="h-[22px] w-auto sm:h-[26px]" />
+        </Link>
+
+        <form
+          onSubmit={goSearch}
+          className="relative z-50 hidden h-12 min-w-0 flex-1 items-center rounded-full bg-[#ededed] lg:flex"
+          onFocus={() => setFocus(true)}
+        >
+          <select
+            value={cat}
+            onChange={(e) => setCat(e.target.value)}
+            className="h-full max-w-[170px] rounded-l-full bg-transparent pl-5 pr-2 text-sm font-bold outline-none"
+            aria-label="Category"
+          >
+            {searchTypes.map((t) => (
+              <option key={t}>{t}</option>
+            ))}
+          </select>
+          <span className="h-5 w-px bg-black/10" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            onFocus={() => setFocus(true)}
+            placeholder="Search"
+            className="h-full min-w-0 flex-1 bg-transparent px-4 text-sm outline-none"
+          />
+          <button type="submit" aria-label="Search" className="mr-1.5 grid h-9 w-9 place-items-center rounded-full">
+            <SearchIcon />
+          </button>
+          {focus ? (
+            <div className="absolute left-0 right-0 top-[calc(100%+10px)] z-50 rounded-3xl border border-[#eee] bg-white p-5 shadow-2xl">
+              <div className="mb-3 flex items-center justify-between">
+                <p className="text-sm font-bold">{q ? "Products" : "Most searched products"}</p>
+                <button type="button" className="text-xs font-bold" onClick={() => setFocus(false)}>
+                  Close
+                </button>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {(q ? results : trending.slice(0, 4)).map((p) => (
+                  <Link
+                    key={p.handle}
+                    to={`/products/${p.handle}`}
+                    onClick={() => setFocus(false)}
+                    className="flex items-center gap-3 rounded-2xl p-2 hover:bg-[#f6f6f6]"
+                  >
+                    <img src={img(p.images[0], 120)} alt="" className="h-14 w-14 rounded-xl object-cover" referrerPolicy="no-referrer" />
+                    <span>
+                      <span className="block text-sm font-semibold">{p.title}</span>
+                      <span className="text-xs text-[#666]">{p.type}</span>
+                    </span>
+                  </Link>
+                ))}
+                {q && results.length === 0 ? <p className="text-sm text-[#666]">No matches. Try a chair, lamp, or table.</p> : null}
+              </div>
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <span className="text-xs font-bold uppercase tracking-wide text-[#888]">Most searched keywords</span>
+                {["Tables & Desks", "Chairs & Stools", "Lighting", "Sofas"].map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    className="rounded-full bg-[#ededed] px-3 py-1 text-xs font-bold"
+                    onClick={() => {
+                      setQ(k);
+                      setFocus(false);
+                      nav(`/search?q=${encodeURIComponent(k)}`);
+                    }}
+                  >
+                    {k}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </form>
+
+        <div className="ml-auto flex items-center gap-1 sm:gap-2">
+          <Link to="/pages/find-a-store" className="mr-2 hidden text-sm font-bold xl:inline">
+            Find a store
+          </Link>
+          <Link to="/account" className="mr-1 hidden text-sm font-bold lg:inline">
+            {store.user ? store.user.name.split(" ")[0] : "Sign in / Register"}
+          </Link>
+          <button type="button" className="grid h-10 w-10 place-items-center lg:hidden" aria-label="Search" onClick={() => store.setSearchOpen(true)}>
+            <SearchIcon />
+          </button>
+          <Link to="/account" className="hidden h-10 w-10 place-items-center sm:grid" aria-label="Account">
+            <UserIcon />
+          </Link>
+          <Link to="/pages/wishlist" className="relative grid h-10 w-10 place-items-center" aria-label="Wishlist">
+            <Heart filled={store.wishlist.length > 0} />
+            {store.wishlist.length > 0 ? (
+              <span className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-black px-1 text-[10px] font-bold text-white">
+                {store.wishlist.length}
+              </span>
+            ) : null}
+          </Link>
+          <button type="button" className="relative grid h-10 w-10 place-items-center" aria-label="Cart" onClick={() => store.setCartOpen(true)}>
+            <Bag />
+            <span className="absolute -right-0.5 -top-0.5 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-[#c4301c] px-1 text-[10px] font-bold text-white">
+              {store.count}
+            </span>
+          </button>
+        </div>
+      </div>
+
+      <nav
+        className="relative hidden border-t border-[#f0f0f0] lg:block"
+        onMouseLeave={() => setOpen(null)}
+      >
+        <ul className="mx-auto flex h-[52px] max-w-[1680px] items-center gap-8 px-10 text-[15px] font-bold">
+          <li onMouseEnter={() => setOpen("cats")}>
+            <button type="button" className="inline-flex items-center gap-1">
+              Shop By Categories <Caret />
+            </button>
+          </li>
+          <li onMouseEnter={() => setOpen("rooms")}>
+            <button type="button" className="inline-flex items-center gap-1">
+              Shop By Room <Caret />
+            </button>
+          </li>
+          <li onMouseEnter={() => setOpen("tables")}>
+            <Link to="/collections/dining-tables" className="inline-flex items-center gap-1">
+              Tables & Desks <Caret />
+            </Link>
+          </li>
+          <li onMouseEnter={() => setOpen("chairs")}>
+            <Link to="/collections/chairs" className="inline-flex items-center gap-1">
+              Chairs & Stools <Caret />
+            </Link>
+          </li>
+          <li onMouseEnter={() => setOpen("pages")}>
+            <button type="button" className="inline-flex items-center gap-1">
+              Pages <Caret />
+            </button>
+          </li>
+          <li onMouseEnter={() => setOpen("features")}>
+            <Link to="/pages/theme-features" className="inline-flex items-center gap-1">
+              Theme Features <Caret />
+            </Link>
+          </li>
+          <li onMouseEnter={() => setOpen(null)}>
+            <Link to="/collections/sale-items" className="inline-flex items-center gap-1.5 text-[#1d349a]">
+              <span className="twinkle">✦</span> On Sale
+            </Link>
+          </li>
+        </ul>
+
+        {open ? (
+          <div className="absolute left-0 right-0 top-full border-t border-[#eee] bg-white shadow-[0_24px_50px_rgba(0,0,0,.08)]">
+            <div className="mx-auto grid max-w-[1680px] gap-8 px-10 py-8">
+              {open === "cats" ? (
+                <div className="grid grid-cols-5 gap-8">
+                  {categoryColumns.map((col) => (
+                    <div key={col.title}>
+                      <p className="mb-3 font-bold">{col.title}</p>
+                      <ul className="space-y-2 text-sm text-[#444]">
+                        {col.links.map((l) => (
+                          <li key={l.label}>
+                            <Link to={l.to} className="rev" onClick={() => setOpen(null)}>
+                              {l.label}
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                  <Link to="/collections/accessories" onClick={() => setOpen(null)} className="relative overflow-hidden rounded-2xl bg-[#f4f1ea]">
+                    <img src={file("collection-slider-10.jpg", 700)} alt="" className="h-56 w-full object-cover" referrerPolicy="no-referrer" />
+                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-4 text-white">
+                      <p className="text-sm">Home & Decor</p>
+                      <p className="text-lg font-bold">Decoration From $10</p>
+                      <span className="mt-2 inline-flex h-9 items-center rounded-full bg-white px-4 text-xs font-bold text-black">Shop Now</span>
+                    </div>
+                  </Link>
+                </div>
+              ) : null}
+
+              {open === "rooms" ? (
+                <div className="grid grid-cols-[220px_1fr] gap-10">
+                  <div className="space-y-1">
+                    {rooms.map((r) => (
+                      <button
+                        key={r.label}
+                        type="button"
+                        onMouseEnter={() => setRoom(r.label)}
+                        className={cn(
+                          "flex w-full items-center justify-between rounded-xl px-4 py-3 text-left font-bold",
+                          room === r.label ? "bg-[#ededed]" : "hover:bg-[#f6f6f6]",
+                        )}
+                      >
+                        {r.label}
+                        <Caret className="-rotate-90" />
+                      </button>
+                    ))}
+                  </div>
+                  <div>
+                    <div className="mb-4 flex items-center justify-between">
+                      <p className="text-lg font-bold">{room}</p>
+                      <Link to={rooms.find((r) => r.label === room)!.to} className="text-sm font-bold underline" onClick={() => setOpen(null)}>
+                        Shop collection
+                      </Link>
+                    </div>
+                    <ul className="grid grid-cols-3 gap-y-3 text-sm">
+                      {rooms
+                        .find((r) => r.label === room)!
+                        .links.map((l) => (
+                          <li key={l.label}>
+                            <Link to={l.to} className="rev" onClick={() => setOpen(null)}>
+                              {l.label}
+                            </Link>
+                          </li>
+                        ))}
+                    </ul>
+                  </div>
+                </div>
+              ) : null}
+
+              {open === "tables" || open === "chairs" ? (
+                <MegaProducts
+                  columns={
+                    open === "tables"
+                      ? [
+                          { title: "Tables", links: [{ label: "Side Tables", to: "/collections/tables" }, { label: "Dining Tables", to: "/collections/tables" }, { label: "Coffee Tables", to: "/collections/tables" }] },
+                          { title: "Desks", links: [{ label: "Office Desks", to: "/collections/desks" }, { label: "The Nova Desk", to: "/products/the-nova-desk" }, { label: "Bracket Desk", to: "/products/bracket-desk" }] },
+                          { title: "Trending Now", links: [{ label: "Turn Table", to: "/products/spin-table" }, { label: "Cross Tables", to: "/collections/tables" }, { label: "Nesting Side Table", to: "/products/nook-table" }] },
+                        ]
+                      : [
+                          { title: "Chairs", links: [{ label: "Dining Chairs", to: "/collections/chairs" }, { label: "Office Chairs", to: "/collections/work-room" }, { label: "Accent Chairs", to: "/collections/bend-chairs" }, { label: "Lounge Chairs", to: "/collections/bend-chairs" }] },
+                          { title: "Stools", links: [{ label: "Bar Stools", to: "/collections/bar-chairs" }, { label: "Counter Stool", to: "/collections/bar-chairs" }, { label: "Ottomans", to: "/collections/soft-stools" }] },
+                          { title: "Trending Now", links: [{ label: "Cross Chair", to: "/products/cross-chair-heritage" }, { label: "Bow Chairs", to: "/collections/bow-chairs" }, { label: "Turn Chairs", to: "/collections/turn-chairs" }] },
+                        ]
+                  }
+                  handles={open === "tables" ? ["feast-chair", "bar-chair-sand", "swivel-table", "etruscan-jug-copy"] : ["arc-chair", "etruscan-jug-copy", "plant-mister-copy", "cozy-chair"]}
+                  onNav={() => setOpen(null)}
+                />
+              ) : null}
+
+              {open === "pages" ? (
+                <div className="grid grid-cols-4 gap-8">
+                  {pageLinks.map((col) => (
+                    <div key={col.title}>
+                      <p className="mb-3 font-bold">{col.title}</p>
+                      <ul className="space-y-2 text-sm">
+                        {col.links.map((l) => (
+                          <li key={l.label}>
+                            <Link to={l.to} className="rev" onClick={() => setOpen(null)}>
+                              {l.label}
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+
+              {open === "features" ? (
+                <div className="grid grid-cols-4 gap-3">
+                  {featureLinks.map((l) => (
+                    <Link
+                      key={l.label}
+                      to={l.to}
+                      onClick={() => setOpen(null)}
+                      className="rounded-2xl bg-[#f6f6f6] px-4 py-4 text-sm font-bold hover:bg-[#ededed]"
+                    >
+                      {l.label}
+                    </Link>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+      </nav>
+    </header>
+  );
+}
+
+function MegaProducts({
+  columns,
+  handles,
+  onNav,
+}: {
+  columns: { title: string; links: { label: string; to: string }[] }[];
+  handles: string[];
+  onNav: () => void;
+}) {
+  return (
+    <div className="grid grid-cols-[1fr_1.1fr] gap-10">
+      <div className="grid grid-cols-3 gap-6">
+        {columns.map((col) => (
+          <div key={col.title}>
+            <p className="mb-3 font-bold">{col.title}</p>
+            <ul className="space-y-2 text-sm text-[#444]">
+              {col.links.map((l) => (
+                <li key={l.label}>
+                  <Link to={l.to} className="rev" onClick={onNav}>
+                    {l.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+      <div>
+        <p className="mb-3 font-bold">Trending Products</p>
+        <div className="grid grid-cols-4 gap-3">
+          {handles.map((h) => {
+            const p = getProduct(h);
+            if (!p) return null;
+            return (
+              <Link key={h} to={`/products/${p.handle}`} onClick={onNav} className="group">
+                <img src={img(p.images[0], 300)} alt={p.title} className="aspect-square w-full rounded-xl object-cover bg-[#f3f3f3]" referrerPolicy="no-referrer" />
+                <p className="mt-2 text-sm font-semibold leading-tight group-hover:underline">{p.title}</p>
+                <p className="text-sm font-bold">${p.variants[0].price.toFixed(2)}</p>
+              </Link>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function MobileMenu() {
+  const store = useStore();
+  const [section, setSection] = useState<string | null>(null);
+  if (!store.menuOpen) return null;
+  return (
+    <div className="fixed inset-0 z-50 lg:hidden">
+      <button className="absolute inset-0 bg-black/40" aria-label="Close menu" onClick={() => store.setMenuOpen(false)} />
+      <div className="absolute inset-y-0 left-0 flex w-[min(100%,380px)] flex-col bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b px-5 py-4">
+          <img src={LOGO} alt="GARACE" className="h-5" />
+          <button type="button" aria-label="Close" onClick={() => store.setMenuOpen(false)}>
+            <CloseIcon />
+          </button>
+        </div>
+        <div className="flex-1 overflow-auto px-5 py-4">
+          {[
+            ["Shop By Categories", categoryColumns.flatMap((c) => c.links)],
+            ["Shop By Room", rooms.map((r) => ({ label: r.label, to: r.to }))],
+            ["Tables & Desks", [{ label: "All tables", to: "/collections/dining-tables" }]],
+            ["Chairs & Stools", [{ label: "All chairs", to: "/collections/chairs" }]],
+            ["Pages", pageLinks.flatMap((c) => c.links)],
+            ["Theme Features", featureLinks],
+          ].map(([title, links]) => (
+            <div key={title as string} className="border-b border-[#eee]">
+              <button
+                type="button"
+                className="flex w-full items-center justify-between py-3.5 font-bold"
+                onClick={() => setSection(section === title ? null : (title as string))}
+              >
+                {title as string}
+                <Caret className={section === title ? "rotate-180" : ""} />
+              </button>
+              {section === title ? (
+                <ul className="space-y-2 pb-3 text-sm text-[#444]">
+                  {(links as { label: string; to: string }[]).map((l) => (
+                    <li key={l.label + l.to}>
+                      <Link to={l.to} onClick={() => store.setMenuOpen(false)}>
+                        {l.label}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ))}
+          <Link to="/collections/sale-items" className="mt-3 block font-bold text-[#1d349a]" onClick={() => store.setMenuOpen(false)}>
+            ✦ On Sale
+          </Link>
+        </div>
+        <div className="border-t px-5 py-4 text-sm">
+          <Link to="/account" className="font-bold" onClick={() => store.setMenuOpen(false)}>
+            Sign in / Register
+          </Link>
+          <div className="mt-3">
+            <Social />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+========== OVERLAYS ==========
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import {
+  colorOption,
+  findVariant,
+  pickVariant,
+  formatMoney,
+  getProduct,
+  img,
+  products,
+} from "@/data/catalog";
+import { linePrice, useStore, volumeRate } from "@/context/Store";
+import { Btn, CloseIcon, Money, Qty, Swatch } from "./ui";
+
+export function Overlays() {
+  return (
+    <>
+      <CartDrawer />
+      <QuickView />
+      <MobileSearch />
+      <CompareBar />
+      <Offers />
+      <Popup />
+      <Toast />
+    </>
+  );
+}
+
+function Toast() {
+  const { toast } = useStore();
+  if (!toast) return null;
+  return (
+    <div className="fixed bottom-6 left-1/2 z-[70] -translate-x-1/2 rounded-full bg-black px-5 py-2.5 text-sm font-semibold text-white shadow-xl">
+      {toast}
+    </div>
+  );
+}
+
+function CartDrawer() {
+  const s = useStore();
+  const [note, setNote] = useState("");
+  const [code, setCode] = useState("");
+  if (!s.cartOpen) return null;
+  const shipLeft = Math.max(0, 500 - s.subtotal);
+  return (
+    <div className="fixed inset-0 z-[60]">
+      <button className="absolute inset-0 bg-black/40" aria-label="Close cart" onClick={() => s.setCartOpen(false)} />
+      <aside className="slide-in absolute inset-y-0 right-0 flex w-[min(100%,420px)] flex-col bg-white">
+        <div className="flex items-center justify-between border-b px-5 py-4">
+          <h2 className="text-lg font-bold">Cart ({s.count})</h2>
+          <button type="button" aria-label="Close" onClick={() => s.setCartOpen(false)}>
+            <CloseIcon />
+          </button>
+        </div>
+        <div className="border-b px-5 py-4">
+          <div className="mb-2 flex justify-between text-xs font-semibold">
+            <span>{shipLeft === 0 ? "You have unlocked free express shipping" : `${formatMoney(shipLeft, s.currency)} away from free express shipping`}</span>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-[#eee]">
+            <div className="h-full bg-[#0d8756]" style={{ width: `${Math.min(100, (s.subtotal / 500) * 100)}%` }} />
+          </div>
+        </div>
+        <div className="flex-1 overflow-auto px-5 py-4">
+          {s.cart.length === 0 ? (
+            <div className="py-16 text-center">
+              <p className="font-bold">Your cart is empty</p>
+              <p className="mt-1 text-sm text-[#666]">The studio is open. Start with a chair.</p>
+              <Btn className="mt-5" to="/collections/all" onClick={() => s.setCartOpen(false)}>
+                Shop all products
+              </Btn>
+            </div>
+          ) : (
+            <ul className="space-y-5">
+              {s.cart.map((line) => {
+                const p = getProduct(line.handle);
+                const v = p?.variants.find((x) => x.id === line.variantId);
+                if (!p || !v) return null;
+                return (
+                  <li key={line.variantId} className="flex gap-3">
+                    <Link to={`/products/${p.handle}`} onClick={() => s.setCartOpen(false)}>
+                      <img src={img(v.image || p.images[0], 200)} alt="" className="h-24 w-24 rounded-xl object-cover bg-[#f3f3f3]" referrerPolicy="no-referrer" />
+                    </Link>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex justify-between gap-2">
+                        <Link to={`/products/${p.handle}`} className="font-semibold leading-tight" onClick={() => s.setCartOpen(false)}>
+                          {p.title}
+                        </Link>
+                        <button type="button" className="text-xs text-[#888]" onClick={() => s.remove(line.variantId)}>
+                          Remove
+                        </button>
+                      </div>
+                      <p className="text-xs text-[#666]">{v.title}</p>
+                      {volumeRate(line.qty) > 0 ? (
+                        <p className="text-xs font-bold text-[#0d8756]">Volume −{volumeRate(line.qty) * 100}%</p>
+                      ) : null}
+                      <div className="mt-2 flex items-center justify-between">
+                        <Qty value={line.qty} onChange={(n) => s.setQty(line.variantId, n)} label={p.title} />
+                        <Money amount={linePrice(line)} />
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {s.cart.length > 0 ? (
+            <label className="mt-6 block text-sm">
+              <span className="font-bold">Order note</span>
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                className="mt-2 h-20 w-full rounded-2xl border border-[#e5e5e5] p-3 outline-none focus:border-black"
+                placeholder="Delivery notes, floor, or a trade account reference"
+              />
+            </label>
+          ) : null}
+        </div>
+        {s.cart.length > 0 ? (
+          <div className="border-t px-5 py-4">
+            <form
+              className="mb-3 flex gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                s.applyCode(code);
+              }}
+            >
+              <input
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                placeholder="Discount code"
+                className="h-11 flex-1 rounded-full bg-[#ededed] px-4 text-sm outline-none"
+              />
+              <button className="h-11 rounded-full bg-[#ededed] px-4 text-sm font-bold">Apply</button>
+            </form>
+            {s.code ? (
+              <p className="mb-2 text-sm font-bold text-[#0d8756]">
+                {s.code} applied{" "}
+                <button type="button" className="underline" onClick={s.clearCode}>
+                  remove
+                </button>
+              </p>
+            ) : null}
+            <div className="flex justify-between text-sm">
+              <span>Subtotal</span>
+              <Money amount={s.subtotal} />
+            </div>
+            {s.discount > 0 ? (
+              <div className="flex justify-between text-sm text-[#0d8756]">
+                <span>Savings</span>
+                <span>−{formatMoney(s.discount, s.currency)}</span>
+              </div>
+            ) : null}
+            <div className="mt-1 flex justify-between font-bold">
+              <span>Total</span>
+              <Money amount={s.total} />
+            </div>
+            <p className="mt-1 text-xs text-[#888]">Taxes and shipping calculated at checkout.</p>
+            <Btn className="mt-3 w-full" to="/checkout" onClick={() => s.setCartOpen(false)}>
+              Checkout
+            </Btn>
+          </div>
+        ) : null}
+      </aside>
+    </div>
+  );
+}
+
+function QuickView() {
+  const s = useStore();
+  const p = s.quick ? getProduct(s.quick) : undefined;
+  const colors = p ? colorOption(p) : undefined;
+  const [color, setColor] = useState<string | undefined>();
+  const [mat, setMat] = useState<string | undefined>();
+  const [qty, setQty] = useState(1);
+  useEffect(() => {
+    if (!p) return;
+    setColor(colorOption(p)?.values[0]);
+    const other = p.options.find((o) => o.name !== colorOption(p)?.name);
+    setMat(other?.values[0]);
+    setQty(1);
+  }, [p]);
+  if (!s.quick || !p) return null;
+  const other = p.options.find((o) => o.name !== colors?.name);
+  const variant = pickVariant(p, {
+    ...(colors && color ? { [colors.name]: color } : {}),
+    ...(other && mat ? { [other.name]: mat } : {}),
+  });
+  const coming = p.tags.includes("Coming Soon") || p.stock === 0;
+  return (
+    <div className="fixed inset-0 z-[60] grid place-items-center p-4">
+      <button className="absolute inset-0 bg-black/45" aria-label="Close quick view" onClick={() => s.setQuick(null)} />
+      <div className="rise relative grid max-h-[90vh] w-full max-w-4xl overflow-auto rounded-3xl bg-white md:grid-cols-2">
+        <button type="button" className="absolute right-4 top-4 z-10" aria-label="Close" onClick={() => s.setQuick(null)}>
+          <CloseIcon />
+        </button>
+        <img src={img(variant.image || p.images[0], 1000)} alt={p.title} className="h-full max-h-[70vh] w-full object-cover bg-[#f3f3f3]" referrerPolicy="no-referrer" />
+        <div className="p-6 md:p-8">
+          <p className="text-xs font-bold uppercase tracking-wide text-[#888]">{p.type}</p>
+          <h3 className="mt-1 text-2xl font-bold">{p.title}</h3>
+          <div className="mt-2">
+            <Money amount={variant.price} compare={variant.compare} />
+          </div>
+          <p className="mt-3 text-sm text-[#555]">{p.desc}</p>
+          {colors ? (
+            <div className="mt-4">
+              <p className="mb-2 text-sm font-bold">Color: {color}</p>
+              <div className="flex flex-wrap gap-2">
+                {colors.values.map((c) => (
+                  <Swatch key={c} name={c} active={color === c} onClick={() => setColor(c)} image={findVariant(p, c).image} />
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {other ? (
+            <div className="mt-4">
+              <p className="mb-2 text-sm font-bold">{other.name}: {mat}</p>
+              <div className="flex flex-wrap gap-2">
+                {other.values.map((m) => (
+                  <button key={m} type="button" onClick={() => setMat(m)} className={`rounded-full border px-3 py-1.5 text-sm font-semibold ${mat === m ? "border-black bg-black text-white" : "border-[#e5e5e5]"}`}>
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          <div className="mt-5 flex flex-wrap items-center gap-3">
+            <Qty value={qty} onChange={setQty} label={p.title} />
+            <Btn
+              disabled={coming || !variant.available}
+              onClick={() => {
+                s.add(p.handle, variant.id, qty);
+                s.setQuick(null);
+              }}
+            >
+              {coming ? "Coming soon" : variant.available ? "Add to cart" : "Sold out"}
+            </Btn>
+          </div>
+          <Link to={`/products/${p.handle}`} className="mt-4 inline-block text-sm font-bold underline" onClick={() => s.setQuick(null)}>
+            View full details
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MobileSearch() {
+  const s = useStore();
+  const nav = useNavigate();
+  const [q, setQ] = useState("");
+  const hits = useMemo(
+    () =>
+      products
+        .filter((p) => `${p.title} ${p.type}`.toLowerCase().includes(q.toLowerCase()))
+        .slice(0, 8),
+    [q],
+  );
+  if (!s.searchOpen) return null;
+  return (
+    <div className="fixed inset-0 z-[60] bg-white p-4">
+      <form
+        className="flex items-center gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          s.setSearchOpen(false);
+          nav(`/search?q=${encodeURIComponent(q)}`);
+        }}
+      >
+        <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search" className="h-12 flex-1 rounded-full bg-[#ededed] px-5 outline-none" />
+        <button type="button" aria-label="Close search" onClick={() => s.setSearchOpen(false)}>
+          <CloseIcon />
+        </button>
+      </form>
+      <div className="mt-4 space-y-2">
+        {hits.map((p) => (
+          <Link key={p.handle} to={`/products/${p.handle}`} onClick={() => s.setSearchOpen(false)} className="flex items-center gap-3">
+            <img src={img(p.images[0], 120)} alt="" className="h-14 w-14 rounded-xl object-cover" referrerPolicy="no-referrer" />
+            <span className="font-semibold">{p.title}</span>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CompareBar() {
+  const s = useStore();
+  if (s.compare.length === 0) return null;
+  return (
+    <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-white/95 px-4 py-3 backdrop-blur">
+      <div className="mx-auto flex max-w-[1680px] flex-wrap items-center gap-3">
+        <p className="font-bold">Compare ({s.compare.length}/5)</p>
+        <div className="flex gap-2">
+          {s.compare.map((h) => {
+            const p = getProduct(h);
+            if (!p) return null;
+            return (
+              <button key={h} type="button" className="relative" onClick={() => s.toggleCompare(h)} aria-label={`Remove ${p.title}`}>
+                <img src={img(p.images[0], 80)} alt="" className="h-12 w-12 rounded-lg object-cover" referrerPolicy="no-referrer" />
+              </button>
+            );
+          })}
+        </div>
+        <div className="ml-auto flex gap-2">
+          <button type="button" className="text-sm font-bold underline" onClick={s.clearCompare}>
+            Clear
+          </button>
+          <Btn to="/pages/compare" className="h-10 px-5 text-sm">
+            Compare
+          </Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Offers() {
+  const s = useStore();
+  const [copied, setCopied] = useState("");
+  const copy = (code: string) => {
+    navigator.clipboard?.writeText(code).catch(() => {});
+    setCopied(code);
+    s.applyCode(code);
+  };
+  return (
+    <div className="fixed bottom-24 left-4 z-30 hidden md:block">
+      {s.offersOpen ? (
+        <div className="mb-2 w-72 rounded-3xl bg-white p-4 shadow-2xl">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="font-bold">Offers</p>
+            <button type="button" aria-label="Close offers" onClick={() => s.setOffersOpen(false)}>
+              <CloseIcon />
+            </button>
+          </div>
+          {[
+            ["FLASH30", "30% off the flash sale"],
+            ["WELCOME10", "10% off your first order"],
+          ].map(([code, label]) => (
+            <button key={code} type="button" onClick={() => copy(code)} className="mt-2 flex w-full items-center justify-between rounded-2xl bg-[#f4f691] px-3 py-3 text-left">
+              <span>
+                <span className="block text-xs">{label}</span>
+                <span className="font-bold">{code}</span>
+              </span>
+              <span className="text-xs font-bold">{copied === code ? "Copied" : "Copy"}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+      <button type="button" onClick={() => s.setOffersOpen(!s.offersOpen)} className="rounded-full bg-black px-4 py-2 text-sm font-bold text-white">
+        Offers
+      </button>
+    </div>
+  );
+}
+
+function Popup() {
+  const s = useStore();
+  const [open, setOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  useEffect(() => {
+    if (localStorage.getItem("garace-popup")) return;
+    const t = window.setTimeout(() => setOpen(true), 14000);
+    return () => window.clearTimeout(t);
+  }, []);
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[65] grid place-items-center p-4">
+      <button className="absolute inset-0 bg-black/50" aria-label="Close popup" onClick={() => { setOpen(false); localStorage.setItem("garace-popup", "1"); }} />
+      <div className="rise relative grid w-full max-w-3xl overflow-hidden rounded-3xl bg-white md:grid-cols-2">
+        <img src="https://hyper-theme-demo.myshopify.com/cdn/shop/files/home-iwt_1-v2.jpg?width=800" alt="" className="hidden h-full object-cover md:block" referrerPolicy="no-referrer" />
+        <div className="p-8">
+          <button type="button" className="absolute right-4 top-4" aria-label="Close" onClick={() => { setOpen(false); localStorage.setItem("garace-popup", "1"); }}>
+            <CloseIcon />
+          </button>
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#1d349a]">The studio list</p>
+          <h3 className="mt-2 text-3xl font-bold leading-tight">10% off your first order</h3>
+          <p className="mt-2 text-sm text-[#555]">Sign up for new pieces, studio notes, and the code WELCOME10.</p>
+          <form
+            className="mt-5"
+            onSubmit={(e) => {
+              e.preventDefault();
+              s.applyCode("WELCOME10");
+              localStorage.setItem("garace-popup", "1");
+              setOpen(false);
+            }}
+          >
+            <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className="h-12 w-full rounded-full bg-[#ededed] px-5 outline-none" />
+            <Btn type="submit" className="mt-3 w-full">
+              Sign up
+            </Btn>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+========== HOME PAGE ==========
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import {
+  circleCats,
+  file,
+  getProduct,
+  img,
+  products,
+  testimonials,
+  type Product,
+} from "@/data/catalog";
+import { ProductCard } from "@/components/ProductCard";
+import { Btn, Money } from "@/components/ui";
+import { useStore } from "@/context/Store";
+
+const picks = (handles: string[]) => handles.map((h) => getProduct(h)).filter((p): p is Product => Boolean(p));
+
+export default function Home() {
+  return (
+    <div>
+      <CircleRow />
+      <Hero />
+      <NewArrivals />
+      <FlashSale />
+      <Editorial />
+      <ShopCats />
+      <FeaturedCols />
+      <Favorites />
+      <Lookbook />
+      <PromoPair />
+      <IconRow />
+      <Offers />
+      <Team />
+      <Quotes />
+      <Deals />
+      <Marquee />
+      <Approach />
+      <Gallery />
+    </div>
+  );
+}
+
+function CircleRow() {
+  return (
+    <section className="border-b border-[#f2f2f2]">
+      <div className="hide-scroll mx-auto flex max-w-[1680px] gap-6 overflow-x-auto px-4 py-6 sm:px-6 lg:px-10">
+        {circleCats.map((c) => (
+          <Link key={c.title} to={c.to} className="group w-[92px] shrink-0 text-center">
+            <span className="mx-auto block h-[84px] w-[84px] overflow-hidden rounded-full bg-[#f3f3f3] ring-1 ring-black/5">
+              <img src={file(c.image, 300)} alt="" className="h-full w-full object-cover transition duration-500 group-hover:scale-105" referrerPolicy="no-referrer" />
+            </span>
+            <span className="mt-2 block text-[13px] font-bold leading-tight">{c.title}</span>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function Hero() {
+  const slides = [
+    {
+      image: "slideshow-2_4b9bfed8-4c88-4c34-a970-423353d0b03e.jpg",
+      kicker: "Modern Elegance",
+      title: "Spoke Sofa",
+      to: "/collections/sofas",
+    },
+    {
+      image: "slideshow-3_a5017f29-7d75-4e6a-9052-3a6b84946846.jpg",
+      kicker: "Contemporary Grace",
+      title: "Dining & Kitchen",
+      to: "/collections/dining-kitchen",
+    },
+  ];
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    const t = window.setInterval(() => setI((n) => (n + 1) % slides.length), 6500);
+    return () => window.clearInterval(t);
+  }, [slides.length]);
+  const s = slides[i];
+  return (
+    <section className="relative h-[68vw] min-h-[420px] max-h-[720px] overflow-hidden bg-[#ece7df]">
+      {slides.map((sl, idx) => (
+        <img
+          key={sl.title}
+          src={file(sl.image, 2000)}
+          alt=""
+          referrerPolicy="no-referrer"
+          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${idx === i ? "opacity-100" : "opacity-0"}`}
+        />
+      ))}
+      <div className="relative z-10 flex h-full items-center">
+        <div className="mx-auto w-full max-w-[1680px] px-6 lg:px-16">
+          <div className="max-w-xl text-black">
+            <p className="text-sm font-bold sm:text-base">{s.kicker}</p>
+            <h1 className="mt-2 text-5xl font-bold leading-[0.95] tracking-tight sm:text-7xl lg:text-[88px]">{s.title}</h1>
+            <Btn to={s.to} className="mt-6">
+              Shop collection
+            </Btn>
+          </div>
+        </div>
+      </div>
+      <div className="absolute bottom-6 left-1/2 z-10 flex -translate-x-1/2 gap-2">
+        {slides.map((sl, idx) => (
+          <button key={sl.title} aria-label={sl.title} onClick={() => setI(idx)} className={`h-2.5 rounded-full transition-all ${idx === i ? "w-8 bg-black" : "w-2.5 bg-black/30"}`} />
+        ))}
+      </div>
+      <button type="button" aria-label="Previous slide" className="absolute left-4 top-1/2 z-10 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full bg-white/90" onClick={() => setI((n) => (n + slides.length - 1) % slides.length)}>
+        ‹
+      </button>
+      <button type="button" aria-label="Next slide" className="absolute right-4 top-1/2 z-10 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full bg-white/90" onClick={() => setI((n) => (n + 1) % slides.length)}>
+        ›
+      </button>
+    </section>
+  );
+}
+
+function NewArrivals() {
+  const tabs = [
+    { id: "new", label: "New Arrivals", handles: ["cross-chair-heritage", "ray-sofa-basic", "turn-chair-vivid", "loop-sofa-armrest"] },
+    { id: "hot", label: "Hot Items", handles: ["arc-chair", "spoke-sofa-mix-copy", "halo-lamp", "dining-table-haven"] },
+    { id: "promo", label: "Promotion", handles: ["swivel-table", "axis-storage-system", "task-chair-luxe", "bottle-grinder"] },
+    { id: "stools", label: "Soft Stools", handles: ["plush-stool", "bar-stool-sand", "stride-stool", "bar-chair-ash"] },
+    { id: "design", label: "Design", handles: ["grid-chair-frame", "arc-chair-dune", "pixel-shelves", "sculpt-table-lamp"] },
+  ];
+  const [tab, setTab] = useState(tabs[0].id);
+  const current = tabs.find((t) => t.id === tab)!;
+  const list = picks(current.handles);
+  return (
+    <section className="mx-auto max-w-[1680px] px-4 py-14 sm:px-6 lg:px-10">
+      <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <h2 className="text-3xl font-bold sm:text-4xl">New Arrivals</h2>
+          <p className="mt-1 text-sm text-[#666]">Traditional divides between personal and professional space.</p>
+        </div>
+        <div className="hide-scroll flex gap-2 overflow-auto">
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTab(t.id)}
+              className={`h-10 shrink-0 rounded-full px-4 text-sm font-bold ${tab === t.id ? "bg-black text-white" : "bg-[#ededed]"}`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
+        <Link to="/collections/new" className="relative hidden min-h-[420px] overflow-hidden rounded-3xl bg-[#f3f1ec] lg:block">
+          <img src={file("collection-tabs-banner-1-v2.jpg", 800)} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+          <div className="absolute inset-x-0 bottom-0 p-5">
+            <p className="text-2xl font-bold">New Arrivals</p>
+            <span className="mt-3 inline-flex h-10 items-center rounded-full bg-black px-5 text-sm font-bold text-white">Shop now</span>
+          </div>
+        </Link>
+        <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+          {list.map((p) => (
+            <ProductCard key={p.handle} product={p} />
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FlashSale() {
+  const [left, setLeft] = useState(calc());
+  const [copied, setCopied] = useState(false);
+  const store = useStore();
+  useEffect(() => {
+    const t = window.setInterval(() => setLeft(calc()), 1000);
+    return () => window.clearInterval(t);
+  }, []);
+  const parts = [
+    ["Days", Math.floor(left / 86400)],
+    ["Hours", Math.floor((left % 86400) / 3600)],
+    ["Mins", Math.floor((left % 3600) / 60)],
+    ["Secs", left % 60],
+  ];
+  return (
+    <section className="mx-auto max-w-[1680px] px-4 sm:px-6 lg:px-10">
+      <div className="flex flex-col items-center justify-between gap-6 rounded-3xl bg-[#f4f691] px-6 py-8 lg:flex-row lg:px-10">
+        <div>
+          <p className="text-lg font-bold">Flash Sale now on!</p>
+          <p className="text-sm text-[#333]">Save on modern table office, best sellers + more</p>
+        </div>
+        <div className="flex gap-3">
+          {parts.map(([label, n]) => (
+            <div key={label as string} className="grid h-[72px] w-[68px] place-items-center rounded-2xl bg-white/70 text-center">
+              <span className="text-2xl font-bold leading-none">{String(n).padStart(2, "0")}</span>
+              <span className="text-[11px] font-semibold uppercase">{label}</span>
+            </div>
+          ))}
+        </div>
+        <button
+          type="button"
+          className="h-12 rounded-full bg-black px-6 text-sm font-bold text-white"
+          onClick={() => {
+            navigator.clipboard?.writeText("FLASH30").catch(() => {});
+            store.applyCode("FLASH30");
+            setCopied(true);
+          }}
+        >
+          {copied ? "Copied" : "Use Code: FLASH30"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function calc() {
+  const end = new Date();
+  end.setMonth(end.getMonth() + 1, 1);
+  end.setHours(0, 0, 0, 0);
+  return Math.max(0, Math.floor((end.getTime() - Date.now()) / 1000));
+}
+
+function Editorial() {
+  const cards = [
+    { kicker: "Danish Design", title: "Material Natural", product: "grid-chair-frame", image: "card-image-1-v2.jpg", to: "/collections/chairs" },
+    { kicker: "Cotton Collection", title: "Authority Design", product: "papilio-tea-towel-copy", image: "card-image-2-v2.jpg", to: "/collections/accessories" },
+    { kicker: "Minimalism Style", title: "Steels Lighting", product: "sculpt-table-lamp", image: "card-image-3-v2.jpg", to: "/collections/lighting" },
+    { kicker: "Danish Design", title: "Nightstand", product: "pixel-shelves", image: "card-image-4-v2.jpg", to: "/collections/storage" },
+  ];
+  return (
+    <section className="mx-auto grid max-w-[1680px] gap-4 px-4 py-14 sm:px-6 md:grid-cols-2 lg:grid-cols-4 lg:px-10">
+      {cards.map((c) => {
+        const p = getProduct(c.product);
+        return (
+          <article key={c.title + c.kicker} className="overflow-hidden rounded-3xl bg-[#f6f6f6]">
+            <Link to={c.to}>
+              <img src={file(c.image, 800)} alt="" className="aspect-[4/5] w-full object-cover" referrerPolicy="no-referrer" />
+            </Link>
+            <div className="p-4">
+              <p className="text-xs font-bold uppercase tracking-wide text-[#888]">{c.kicker}</p>
+              <h3 className="text-xl font-bold">{c.title}</h3>
+              {p ? (
+                <Link to={`/products/${p.handle}`} className="mt-3 flex items-center gap-3 rounded-2xl bg-white p-2">
+                  <img src={img(p.images[0], 120)} alt="" className="h-14 w-14 rounded-xl object-cover" referrerPolicy="no-referrer" />
+                  <span>
+                    <span className="block text-sm font-semibold">{p.title}</span>
+                    <Money amount={p.variants[0].price} compare={p.variants[0].compare} className="text-sm" />
+                  </span>
+                </Link>
+              ) : null}
+              <Link to={c.to} className="mt-3 inline-block text-sm font-bold underline">
+                Shop
+              </Link>
+            </div>
+          </article>
+        );
+      })}
+    </section>
+  );
+}
+
+function ShopCats() {
+  return (
+    <section className="mx-auto max-w-[1680px] px-4 pb-6 sm:px-6 lg:px-10">
+      <div className="mb-6 flex items-end justify-between">
+        <h2 className="text-3xl font-bold sm:text-4xl">Shop By Categories</h2>
+        <Link to="/collections/all" className="text-sm font-bold underline">
+          Shop All Products
+        </Link>
+      </div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        {circleCats.map((c) => (
+          <Link key={c.title} to={c.to} className="group">
+            <span className="block overflow-hidden rounded-3xl bg-[#f3f3f3]">
+              <img src={file(c.image, 500)} alt="" className="aspect-square w-full object-cover transition duration-500 group-hover:scale-105" referrerPolicy="no-referrer" />
+            </span>
+            <span className="mt-2 block text-center text-sm font-bold">{c.title}</span>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function FeaturedCols() {
+  const items = [
+    {
+      title: "Heritage Living",
+      text: "With a shape inspired by the bollards used to secure vessels to a jetty.",
+      image: "collection-tab-1-v2.jpg",
+      to: "/collections/living-room",
+    },
+    {
+      title: "The Haven Collection",
+      text: "Anchored in design, inspired by the sturdy bollards that secure ships to docks.",
+      image: "collection-tab-2-v2.jpg",
+      to: "/collections/bed-room",
+    },
+    {
+      title: "Solace Series",
+      text: "Designed with a silhouette inspired by the crossbars that provide strength and stability.",
+      image: "collection-tab-3-v2.jpg",
+      to: "/collections/work-room",
+    },
+  ];
+  return (
+    <section className="mx-auto max-w-[1680px] px-4 py-14 sm:px-6 lg:px-10">
+      <h2 className="mb-6 text-3xl font-bold sm:text-4xl">Featured Collections</h2>
+      <div className="grid gap-4 lg:grid-cols-3">
+        {items.map((it) => (
+          <Link key={it.title} to={it.to} className="group relative min-h-[420px] overflow-hidden rounded-3xl">
+            <img src={file(it.image, 1000)} alt="" className="absolute inset-0 h-full w-full object-cover transition duration-700 group-hover:scale-105" referrerPolicy="no-referrer" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
+            <div className="absolute inset-x-0 bottom-0 p-6 text-white">
+              <h3 className="text-2xl font-bold">{it.title}</h3>
+              <p className="mt-1 max-w-sm text-sm text-white/90">{it.text}</p>
+              <span className="mt-4 inline-flex h-10 items-center rounded-full bg-white px-5 text-sm font-bold text-black">Shop Collection</span>
+            </div>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function Favorites() {
+  const cards = [
+    { image: "favorite-prd-1-v2.jpg", handle: "turn-chair-vivid" },
+    { image: "favorite-prd-2-v2.jpg", handle: "highline-table" },
+    { image: "favorite-prd-3_25a13224-385b-469f-b6a9-e3d4245c7da0.jpg", handle: "cross-chair-walnut" },
+  ];
+  const [i, setI] = useState(0);
+  const quotes = testimonials.slice(0, 3);
+  const q = quotes[i % quotes.length];
+  return (
+    <section className="bg-[#f7f7f7] py-14">
+      <div className="mx-auto grid max-w-[1680px] items-center gap-8 px-4 sm:px-6 lg:grid-cols-[0.8fr_1.2fr] lg:px-10">
+        <div>
+          <h2 className="text-3xl font-bold sm:text-4xl">Our Favorite Products</h2>
+          <blockquote className="mt-6 text-xl font-medium leading-snug">“{q.quote}”</blockquote>
+          <p className="mt-4 font-bold">{q.name}</p>
+          <p className="text-sm text-[#666]">{q.place}</p>
+          <div className="mt-5 flex gap-2">
+            {quotes.map((_, idx) => (
+              <button key={idx} aria-label={`Quote ${idx + 1}`} onClick={() => setI(idx)} className={`h-2.5 rounded-full ${idx === i ? "w-7 bg-black" : "w-2.5 bg-black/25"}`} />
+            ))}
+          </div>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-3">
+          {cards.map((c) => {
+            const p = getProduct(c.handle);
+            return (
+              <div key={c.handle} className="relative overflow-hidden rounded-3xl">
+                <img src={file(c.image, 700)} alt="" className="aspect-[3/4] w-full object-cover" referrerPolicy="no-referrer" />
+                {p ? (
+                  <Link to={`/products/${p.handle}`} className="absolute inset-x-3 bottom-3 flex items-center gap-2 rounded-2xl bg-white p-2 shadow-lg">
+                    <img src={img(p.images[0], 120)} alt="" className="h-12 w-12 rounded-xl object-cover" referrerPolicy="no-referrer" />
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold">{p.title}</span>
+                      <Money amount={p.variants[0].price} compare={p.variants[0].compare} className="text-sm" />
+                    </span>
+                  </Link>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Lookbook() {
+  const slides = [
+    { image: "lookbook-slider-1-v2.jpg", handles: ["loop-sofa-armrest", "flip-table-lamp", "swivel-table"] },
+    { image: "lookbook-slider-2-v2.jpg", handles: ["arc-chair", "arc-chair-dune", "bar-chair-ash"] },
+    { image: "lookbook-slider-3-v2.jpg", handles: ["nook-table", "swivel-table", "swing-wall-lamp"] },
+    { image: "lookbook-slider-5-v2.jpg", handles: ["ray-table-lamp-1", "arc-rack-shelf", "axis-storage-system"] },
+    { image: "lookbook-slider-6-v2.jpg", handles: ["arc-chair", "arc-chair-dune", "swivel-table"] },
+  ];
+  const [i, setI] = useState(0);
+  const [pin, setPin] = useState(0);
+  const store = useStore();
+  const s = slides[i];
+  const list = picks(s.handles);
+  return (
+    <section className="mx-auto max-w-[1680px] px-4 py-14 sm:px-6 lg:px-10">
+      <div className="mb-5 flex items-end justify-between">
+        <h2 className="text-3xl font-bold sm:text-4xl">Get Inspired by Spaces</h2>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            aria-label="Previous look"
+            className="grid h-10 w-10 place-items-center rounded-full bg-[#ededed] transition hover:bg-black hover:text-white"
+            onClick={() => {
+              setI((n) => (n + slides.length - 1) % slides.length);
+              setPin(0);
+            }}
+          >
+            ‹
+          </button>
+          <button
+            type="button"
+            aria-label="Next look"
+            className="grid h-10 w-10 place-items-center rounded-full bg-black text-white transition hover:bg-[#1d349a]"
+            onClick={() => {
+              setI((n) => (n + 1) % slides.length);
+              setPin(0);
+            }}
+          >
+            ›
+          </button>
+        </div>
+      </div>
+      <div className="relative overflow-hidden rounded-3xl">
+        <div className="relative overflow-hidden rounded-3xl">
+          <img src={file(s.image, 1800)} alt="Styled room" className="max-h-[640px] w-full object-cover" referrerPolicy="no-referrer" />
+          {[18, 44, 68].map((left, idx) => (
+            <button
+              key={left}
+              type="button"
+              aria-label={`Select look item ${idx + 1}`}
+              onClick={() => setPin(idx)}
+              className={`absolute grid h-9 w-9 place-items-center rounded-full text-sm font-bold shadow-lg transition ${
+                pin === idx ? "scale-110 bg-[#1d349a] text-white ring-4 ring-white/70" : "bg-white text-black hover:scale-105"
+              }`}
+              style={{ left: `${left}%`, top: `${32 + idx * 14}%` }}
+            >
+              {idx + 1}
+            </button>
+          ))}
+        </div>
+        <div className="mt-3 w-full rounded-3xl bg-white p-4 shadow-xl lg:absolute lg:bottom-4 lg:right-4 lg:mt-0 lg:w-[min(100%-2rem,350px)]">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-bold">{list.length} · Shop this look</p>
+            <span className="text-xs text-[#666]">Slide {i + 1}/{slides.length}</span>
+          </div>
+          <ul className="mt-3 space-y-2.5">
+            {list.map((p, idx) => (
+              <li
+                key={p.handle + idx}
+                className={`rounded-2xl p-1.5 transition ${pin === idx ? "bg-[#f3f5ff] ring-1 ring-[#1d349a]/30" : "hover:bg-[#f7f7f7]"}`}
+                onMouseEnter={() => setPin(idx)}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#ededed] text-xs font-bold">
+                    {idx + 1}
+                  </span>
+                  <Link to={`/products/${p.handle}`} className="flex min-w-0 flex-1 items-center gap-3">
+                    <img src={img(p.images[0], 140)} alt="" className="h-13 w-13 rounded-xl object-cover" referrerPolicy="no-referrer" />
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold">{p.title}</span>
+                      <Money amount={p.variants[0].price} compare={p.variants[0].compare} className="text-sm" />
+                    </span>
+                  </Link>
+                  <button
+                    type="button"
+                    aria-label={`Add ${p.title} to cart`}
+                    onClick={() => store.add(p.handle, p.variants[0].id, 1)}
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-black text-xs font-bold text-white hover:bg-[#1d349a]"
+                  >
+                    +
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            onClick={() => list.forEach((p) => store.add(p.handle, p.variants[0].id, 1))}
+            className="mt-3 h-10 w-full rounded-full bg-black text-xs font-bold text-white transition hover:bg-[#1d349a]"
+          >
+            Add look to cart
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PromoPair() {
+  const items = [
+    { image: "home-banner-01.webp", kicker: "Save 40%", title: "Turn Chairs", text: "Elevate your space with 40% off our timeless designs!", to: "/collections/turn-chairs" },
+    { image: "home-banner-02.webp", kicker: "Save 30%", title: "Cross Chairs", text: "Get 30% off elegant, timeless seating—don’t miss out!", to: "/collections/bow-chairs" },
+  ];
+  return (
+    <section className="mx-auto grid max-w-[1680px] gap-4 px-4 sm:px-6 lg:grid-cols-2 lg:px-10">
+      {items.map((it) => (
+        <Link key={it.title} to={it.to} className="relative min-h-[320px] overflow-hidden rounded-3xl">
+          <img src={file(it.image, 1200)} alt="" className="absolute inset-0 h-full w-full object-cover" referrerPolicy="no-referrer" />
+          <div className="absolute inset-0 bg-gradient-to-r from-black/50 to-transparent" />
+          <div className="relative max-w-sm p-8 text-white">
+            <p className="text-sm font-bold">{it.kicker}</p>
+            <h3 className="text-4xl font-bold">{it.title}</h3>
+            <p className="mt-2 text-sm text-white/90">{it.text}</p>
+            <span className="mt-5 inline-flex h-11 items-center rounded-full bg-white px-5 text-sm font-bold text-black">Shop Now</span>
+          </div>
+        </Link>
+      ))}
+    </section>
+  );
+}
+
+function IconRow() {
+  const items = [
+    ["Living Room", "/collections/living-room", "collection-tab-1-v2.jpg"],
+    ["Planters", "/collections/outdoor", "collection-slider-2.jpg"],
+    ["Gravel Rug", "/products/gravel-rug-copy", "collection-slider-10.jpg"],
+    ["Table Mirror", "/collections/accessories", "collection-slider-7.jpg"],
+    ["Dining Decor", "/collections/dining-kitchen", "slideshow-3_a5017f29-7d75-4e6a-9052-3a6b84946846.jpg"],
+    ["Ray Table Lamp", "/products/ray-table-lamp-1", "collection-slider-2.jpg"],
+    ["Chairs", "/collections/chairs", "collection-slider-6.jpg"],
+  ];
+  return (
+    <section className="hide-scroll mx-auto flex max-w-[1680px] gap-8 overflow-auto px-4 py-12 sm:px-6 lg:justify-center lg:px-10">
+      {items.map(([label, to, image]) => (
+        <Link key={label} to={to} className="w-24 shrink-0 text-center">
+          <span className="mx-auto block h-20 w-20 overflow-hidden rounded-full bg-[#f3f3f3]">
+            <img src={file(image, 240)} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+          </span>
+          <span className="mt-2 block text-xs font-bold">{label}</span>
+        </Link>
+      ))}
+    </section>
+  );
+}
+
+function Offers() {
+  const list = picks(["cross-table-bark", "axis-storage-system", "task-chair-luxe", "cross-chair-heritage", "plush-stool", "bottle-grinder"]);
+  return (
+    <section className="mx-auto max-w-[1680px] px-4 pb-8 sm:px-6 lg:px-10">
+      <div className="mb-6 flex items-end justify-between">
+        <div>
+          <h2 className="text-3xl font-bold sm:text-4xl">Shop Our Offers</h2>
+          <p className="text-sm text-[#666]">Traditional divides between personal and professional space.</p>
+        </div>
+        <Link to="/collections/sale-items" className="text-sm font-bold underline">
+          Shop All Products
+        </Link>
+      </div>
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
+        {list.map((p) => (
+          <ProductCard key={p.handle} product={p} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function Team() {
+  return (
+    <section className="mx-auto grid max-w-[1680px] items-center gap-10 px-4 py-16 sm:px-6 lg:grid-cols-2 lg:px-10">
+      <div className="relative">
+        <img src={file("home-iwt_1-v2.jpg", 1400)} alt="Garace studio interior" className="w-full rounded-3xl object-cover" referrerPolicy="no-referrer" />
+        <img src={file("iwt-badge.png", 320)} alt="Garace — where design meets function" className="absolute -bottom-6 left-6 w-36 sm:w-44" referrerPolicy="no-referrer" />
+      </div>
+      <div className="lg:pl-6">
+        <p className="text-sm font-bold uppercase tracking-[0.18em] text-[#1d349a]">Meet Our Team</p>
+        <h2 className="mt-2 text-4xl font-bold leading-tight">The creative minds behind our studio</h2>
+        <p className="mt-4 max-w-lg text-[#555]">
+          As designers we are constantly thinking about how people live and what problems we could solve for them.
+        </p>
+        <div className="mt-8 grid gap-4 sm:grid-cols-3">
+          {[
+            ["Product locally in New York", "Studio"],
+            ["4,8 Review Score", "Loved"],
+            ["Over 50 Products", "Collection"],
+          ].map(([t, k]) => (
+            <div key={t} className="rounded-2xl bg-[#f6f6f6] p-4">
+              <p className="text-xs font-bold uppercase tracking-wide text-[#1d349a]">{k}</p>
+              <p className="mt-1 font-bold leading-snug">{t}</p>
+            </div>
+          ))}
+        </div>
+        <Btn to="/pages/contact" className="mt-8">
+          Contact Us
+        </Btn>
+      </div>
+    </section>
+  );
+}
+
+function Quotes() {
+  const list = testimonials.slice(3);
+  return (
+    <section className="bg-[#f7f7f7] py-16">
+      <div className="mx-auto max-w-[1680px] px-4 sm:px-6 lg:px-10">
+        <h2 className="mb-8 text-3xl font-bold sm:text-4xl">What Clients Talk About Us</h2>
+        <div className="grid gap-4 md:grid-cols-3">
+          {list.map((t) => (
+            <figure key={t.name + t.place} className="rounded-3xl bg-white p-6">
+              <div className="text-[#1d349a]">★★★★★</div>
+              <blockquote className="mt-3 text-lg font-medium leading-snug">“{t.quote}”</blockquote>
+              <figcaption className="mt-5">
+                <p className="font-bold">{t.name}</p>
+                <p className="text-sm text-[#666]">{t.place}</p>
+              </figcaption>
+            </figure>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Deals() {
+  const slides = [
+    { kicker: "Hot Deals", title: "The Bow Chairs Under $200", text: "Introducing the latest styles in seating tailored for every occasion and taste.", image: "slider-w-multi-slide1-v2.jpg", to: "/collections/bow-chairs" },
+    { kicker: "Dining & Kitchen", title: "Difference in the Details", text: "Highlighting the unique touches that set every piece apart, crafted to elevate your space.", image: "slider-w-multi-slide2-v2.jpg", to: "/collections/dining-kitchen" },
+  ];
+  const tiles = [
+    { title: "Select Table Lamps", text: "Get up to $100 Off", image: "slider-w-multi-col1-v2.jpg", to: "/collections/lighting" },
+    { title: "Select Lounge Chairs", text: "From $200", image: "slider-w-multi-col2-v2.jpg", to: "/collections/bend-chairs" },
+    { title: "Select Side tables", text: "Get up to $1,000", image: "slider-w-multi-col3-v2.jpg", to: "/collections/tables" },
+    { title: "Select Home Decors", text: "Buy One Get One", image: "slider-w-multi-col4-v2.jpg", to: "/collections/accessories" },
+  ];
+  const [i, setI] = useState(0);
+  const s = slides[i];
+  return (
+    <section className="mx-auto grid max-w-[1680px] gap-4 px-4 py-14 sm:px-6 lg:grid-cols-2 lg:px-10">
+      <div className="relative min-h-[460px] overflow-hidden rounded-3xl">
+        <img src={file(s.image, 1200)} alt="" className="absolute inset-0 h-full w-full object-cover" referrerPolicy="no-referrer" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 p-8 text-white">
+          <p className="text-sm font-bold">{s.kicker}</p>
+          <h3 className="max-w-md text-4xl font-bold leading-tight">{s.title}</h3>
+          <p className="mt-2 max-w-md text-sm text-white/90">{s.text}</p>
+          <Btn to={s.to} variant="light" className="mt-5">
+            Shop Now
+          </Btn>
+        </div>
+        <div className="absolute right-4 top-4 flex gap-2">
+          {slides.map((_, idx) => (
+            <button key={idx} aria-label={`Deal ${idx + 1}`} onClick={() => setI(idx)} className={`h-2.5 rounded-full ${idx === i ? "w-7 bg-white" : "w-2.5 bg-white/60"}`} />
+          ))}
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        {tiles.map((t) => (
+          <Link key={t.title} to={t.to} className="relative min-h-[220px] overflow-hidden rounded-3xl">
+            <img src={file(t.image, 700)} alt="" className="absolute inset-0 h-full w-full object-cover" referrerPolicy="no-referrer" />
+            <div className="absolute inset-0 bg-black/25" />
+            <div className="relative p-5 text-white">
+              <p className="text-lg font-bold leading-tight">{t.title}</p>
+              <p className="text-sm">{t.text}</p>
+            </div>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function Marquee() {
+  const text = ["Lounge Chairs", "Bow Chairs", "Cross Chair", "Spoke Sofa", "Arc Lamp", "Garace Studio"];
+  const row = [...text, ...text, ...text, ...text];
+  return (
+    <div className="overflow-hidden bg-[#1d349a] py-4 text-white">
+      <div className="marquee-track flex w-max gap-10 text-lg font-bold">
+        {[0, 1].map((k) => (
+          <div key={k} className="flex gap-10 pr-10">
+            {row.map((t, i) => (
+              <span key={k + t + i} className="flex items-center gap-10">
+                {t} <span className="text-[#f4f691]">✦</span>
+              </span>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Approach() {
+  const cols = [
+    { image: "multicolumn-1-v2.jpg", title: "Comfortable", text: "Bow Chair is available in Natural or Black-stained Oak with full EU Ecolabel certification." },
+    { image: "multicolumn-2-v2.jpg", title: "Price transparency", text: "Fair pricing ensures you know exactly what you’re paying for, with no hidden costs or markups." },
+    { image: "multicolumn-3-v2.jpg", title: "All eco-certified", text: "All products consider a more holistic environmental impact and are designed for a longer lifetime." },
+    { image: "multicolumn-4-v2.jpg", title: "Sustainability", text: "Committed to sustainable practices, ethical sourcing, and reducing environmental impact." },
+  ];
+  return (
+    <section className="mx-auto max-w-[1680px] px-4 py-16 sm:px-6 lg:px-10">
+      <h2 className="mb-8 max-w-xl text-3xl font-bold sm:text-4xl">This approach resulted in the beautiful structure</h2>
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        {cols.map((c) => (
+          <article key={c.title}>
+            <img src={file(c.image, 700)} alt="" className="aspect-[4/5] w-full rounded-3xl object-cover" referrerPolicy="no-referrer" />
+            <h3 className="mt-3 text-lg font-bold">{c.title}</h3>
+            <p className="text-sm text-[#555]">{c.text}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function Gallery() {
+  const shots = [
+    ["instagram-5-v2.jpg", "@north.room"],
+    ["instagram-7-v2.jpg", "@studio.edit"],
+    ["instagram-2-v2.jpg", "@garace.home"],
+    ["instagram-3-v2.jpg", "@linen.days"],
+    ["instagram-4-v2.jpg", "@slow.objects"],
+    ["instagram-6-v2.jpg", "@arc.living"],
+  ];
+  return (
+    <section className="pb-16">
+      <div className="mb-5 px-4 text-center sm:px-6">
+        <p className="text-sm font-bold uppercase tracking-[0.18em] text-[#1d349a]">Follow along</p>
+        <h2 className="text-3xl font-bold">@garace</h2>
+      </div>
+      <div className="hide-scroll flex gap-3 overflow-auto px-4">
+        {shots.map(([image, user]) => (
+          <a key={image} href="#" onClick={(e) => e.preventDefault()} className="group relative w-[240px] shrink-0 overflow-hidden rounded-2xl sm:w-[280px]">
+            <img src={file(image, 600)} alt="" className="aspect-square w-full object-cover transition duration-500 group-hover:scale-105" referrerPolicy="no-referrer" />
+            <span className="absolute bottom-3 left-3 rounded-full bg-white/90 px-3 py-1 text-xs font-bold">{user}</span>
+          </a>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export const featuredHandles = products.slice(0, 4).map((p) => p.handle);
+========== SHOP PAGE ==========
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
+import {
+  collectionProducts,
+  colorOption,
+  discountPct,
+  file,
+  findVariant,
+  pickVariant,
+  getCollection,
+  getProduct,
+  img,
+  products,
+  related,
+} from "@/data/catalog";
+import { ProductCard } from "@/components/ProductCard";
+import { Btn, Crumbs, Heart, Money, Qty, Stars, Swatch } from "@/components/ui";
+import { useStore } from "@/context/Store";
+import { cn } from "@/utils/cn";
+
+export function CollectionPage() {
+  const { handle = "all" } = useParams();
+  const [params, setParams] = useSearchParams();
+  const col = getCollection(handle) ?? getCollection("all")!;
+  const layout = params.get("layout") || "banner";
+  const [sort, setSort] = useState("featured");
+  const [grid, setGrid] = useState<"grid" | "list">("grid");
+  const [cols, setCols] = useState(4);
+  const [maxPrice, setMaxPrice] = useState(4000);
+  const [inStock, setInStock] = useState(false);
+  const [types, setTypes] = useState<string[]>([]);
+  const [colors, setColors] = useState<string[]>([]);
+  const [openFilters, setOpenFilters] = useState(false);
+
+  const base = collectionProducts(col.handle);
+  const allTypes = Array.from(new Set(base.map((p) => p.type))).sort();
+  const allColors = Array.from(
+    new Set(base.flatMap((p) => colorOption(p)?.values ?? [])),
+  ).sort();
+
+  const list = useMemo(() => {
+    let items = base.filter((p) => p.variants[0].price <= maxPrice);
+    if (inStock) items = items.filter((p) => p.stock > 0 && !p.tags.includes("Coming Soon"));
+    if (types.length) items = items.filter((p) => types.includes(p.type));
+    if (colors.length) items = items.filter((p) => colorOption(p)?.values.some((c) => colors.includes(c)));
+    const arr = [...items];
+    if (sort === "az") arr.sort((a, b) => a.title.localeCompare(b.title));
+    if (sort === "za") arr.sort((a, b) => b.title.localeCompare(a.title));
+    if (sort === "low") arr.sort((a, b) => a.variants[0].price - b.variants[0].price);
+    if (sort === "high") arr.sort((a, b) => b.variants[0].price - a.variants[0].price);
+    if (sort === "new") arr.sort((a, b) => Number(b.tags.includes("New")) - Number(a.tags.includes("New")));
+    return arr;
+  }, [base, maxPrice, inStock, types, colors, sort]);
+
+  const toggle = (arr: string[], v: string, set: (n: string[]) => void) =>
+    set(arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
+
+  const banner = (
+    <div
+      className={cn(
+        "relative overflow-hidden rounded-3xl",
+        layout === "none" && "hidden",
+        layout === "bg" && "bg-[#1d349a] text-white",
+        layout === "cards" && "bg-[#f6f6f6]",
+      )}
+    >
+      {layout !== "bg" && layout !== "cards" ? (
+        <img src={file(col.image, 1800)} alt="" className="h-56 w-full object-cover sm:h-72" referrerPolicy="no-referrer" />
+      ) : (
+        <div className="h-48" />
+      )}
+      <div className={cn("absolute inset-0 flex flex-col justify-end p-8", layout === "bg" || layout === "cards" ? "relative" : "bg-gradient-to-t from-black/55 to-transparent text-white")}>
+        <p className="text-sm font-bold opacity-80">{base.length} products</p>
+        <h1 className="text-4xl font-bold">{col.title}</h1>
+        <p className="mt-1 max-w-xl text-sm opacity-90">{col.blurb}</p>
+      </div>
+    </div>
+  );
+
+  const filters = (
+    <div className="space-y-6">
+      <div>
+        <p className="font-bold">Availability</p>
+        <label className="mt-2 flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={inStock} onChange={() => setInStock((v) => !v)} /> In stock ({base.filter((p) => p.stock > 0).length})
+        </label>
+      </div>
+      <div>
+        <p className="font-bold">Price</p>
+        <input type="range" min={10} max={4000} value={maxPrice} onChange={(e) => setMaxPrice(Number(e.target.value))} className="mt-3 w-full accent-black" />
+        <p className="text-sm text-[#666]">Up to ${maxPrice.toLocaleString()}</p>
+      </div>
+      <div>
+        <p className="font-bold">Color</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {allColors.map((c) => (
+            <button key={c} type="button" onClick={() => toggle(colors, c, setColors)} className={cn("rounded-full", colors.includes(c) && "ring-2 ring-black ring-offset-2")}>
+              <Swatch name={c} />
+            </button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <p className="font-bold">Product type</p>
+        <ul className="mt-2 space-y-1 text-sm">
+          {allTypes.map((t) => (
+            <li key={t}>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={types.includes(t)} onChange={() => toggle(types, t, setTypes)} />
+                {t}
+                <span className="text-[#999]">({base.filter((p) => p.type === t).length})</span>
+              </label>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <button
+        type="button"
+        className="text-sm font-bold underline"
+        onClick={() => {
+          setTypes([]);
+          setColors([]);
+          setInStock(false);
+          setMaxPrice(4000);
+        }}
+      >
+        Clear filters
+      </button>
+    </div>
+  );
+
+  return (
+    <div className="mx-auto max-w-[1680px] px-4 py-8 sm:px-6 lg:px-10">
+      <Crumbs items={[{ label: col.title }]} />
+      <div className={cn("mb-8", layout === "right" && "lg:ml-auto lg:max-w-3xl", layout === "left" && "lg:max-w-3xl")}>{banner}</div>
+      <div className="grid gap-8 lg:grid-cols-[240px_1fr]">
+        <aside className="hidden lg:block">{filters}</aside>
+        <div>
+          <div className="mb-5 flex flex-wrap items-center gap-3">
+            <button type="button" className="h-10 rounded-full bg-[#ededed] px-4 text-sm font-bold lg:hidden" onClick={() => setOpenFilters(true)}>
+              Filter
+            </button>
+            <p className="text-sm text-[#666]">{list.length} products</p>
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <select value={sort} onChange={(e) => setSort(e.target.value)} className="h-10 rounded-full bg-[#ededed] px-3 text-sm font-bold">
+                <option value="featured">Featured</option>
+                <option value="new">New</option>
+                <option value="az">Alphabetically, A–Z</option>
+                <option value="za">Alphabetically, Z–A</option>
+                <option value="low">Price, low to high</option>
+                <option value="high">Price, high to low</option>
+              </select>
+              <button type="button" className={cn("h-10 rounded-full px-3 text-sm font-bold", grid === "grid" ? "bg-black text-white" : "bg-[#ededed]")} onClick={() => setGrid("grid")}>
+                Grid
+              </button>
+              <button type="button" className={cn("h-10 rounded-full px-3 text-sm font-bold", grid === "list" ? "bg-black text-white" : "bg-[#ededed]")} onClick={() => setGrid("list")}>
+                List
+              </button>
+              <button type="button" className="hidden h-10 rounded-full bg-[#ededed] px-3 text-sm font-bold xl:inline" onClick={() => setCols(cols === 4 ? 3 : 4)}>
+                {cols} col
+              </button>
+            </div>
+          </div>
+          {list.length === 0 ? (
+            <p className="py-16 text-center text-[#666]">No pieces match those filters.</p>
+          ) : (
+            <div className={cn("grid gap-5", grid === "list" ? "grid-cols-1" : cols === 3 ? "grid-cols-2 xl:grid-cols-3" : "grid-cols-2 xl:grid-cols-4")}>
+              {list.map((p) => (
+                <ProductCard key={p.handle} product={p} layout={grid} swatch={params.get("swatch") === "image" ? "image" : "color"} />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+      {openFilters ? (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <button className="absolute inset-0 bg-black/40" onClick={() => setOpenFilters(false)} aria-label="Close filters" />
+          <div className="absolute inset-y-0 left-0 w-[min(100%,340px)] overflow-auto bg-white p-5">
+            <div className="mb-4 flex items-center justify-between">
+              <p className="font-bold">Filter</p>
+              <button type="button" onClick={() => setOpenFilters(false)}>Close</button>
+            </div>
+            {filters}
+          </div>
+        </div>
+      ) : null}
+      <div className="mt-8 flex flex-wrap gap-2 text-xs">
+        {["banner", "left", "right", "bg", "cards", "none"].map((l) => (
+          <button key={l} type="button" className="rounded-full bg-[#f3f3f3] px-3 py-1 font-bold capitalize" onClick={() => setParams({ layout: l })}>
+            {l} layout
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function ProductPage() {
+  const { handle = "" } = useParams();
+  const [params] = useSearchParams();
+  const product = getProduct(handle);
+  const gallery = params.get("gallery") || "vertical";
+  const swatch = params.get("swatch") === "image" ? "image" : "color";
+  const store = useStore();
+  const colors = product ? colorOption(product) : undefined;
+  const other = product?.options.find((o) => o.name !== colors?.name);
+  const [color, setColor] = useState(colors?.values[0]);
+  const [mat, setMat] = useState(other?.values[0]);
+  const [qty, setQty] = useState(1);
+  const [shot, setShot] = useState(0);
+  const [tab, setTab] = useState("Description");
+  const [zip, setZip] = useState("");
+  const [eta, setEta] = useState("");
+  const [notify, setNotify] = useState("");
+  const [noted, setNoted] = useState(false);
+  const [showSticky, setShowSticky] = useState(false);
+
+  useEffect(() => {
+    if (!product) return;
+    setColor(colorOption(product)?.values[0]);
+    setMat(product.options.find((o) => o.name !== colorOption(product)?.name)?.values[0]);
+    setQty(1);
+    setShot(0);
+    setTab("Description");
+    setNoted(false);
+  }, [product]);
+
+  useEffect(() => {
+    const onScroll = () => setShowSticky(window.scrollY > 580);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  if (!product) {
+    return (
+      <div className="mx-auto max-w-3xl px-6 py-24 text-center">
+        <h1 className="text-3xl font-bold">Piece not found</h1>
+        <Btn to="/collections/all" className="mt-6">
+          Back to the collection
+        </Btn>
+      </div>
+    );
+  }
+
+  const variant = pickVariant(product, {
+    ...(colors && color ? { [colors.name]: color } : {}),
+    ...(other && mat ? { [other.name]: mat } : {}),
+  });
+  const images = product.images.length ? product.images : [variant.image || ""];
+  const active = images[Math.min(shot, images.length - 1)];
+  const coming = product.tags.includes("Coming Soon");
+  const sold = product.stock === 0 || product.handle === "victoria-ottoman" || !variant.available;
+  const pct = discountPct(variant.price, variant.compare);
+  const more = related(product, 4);
+
+  return (
+    <div className="mx-auto max-w-[1680px] px-4 py-8 sm:px-6 lg:px-10">
+      <Crumbs items={[{ label: product.type, to: `/collections/${product.type === "Lamps" ? "lighting" : "all"}` }, { label: product.title }]} />
+      <div className="grid gap-10 lg:grid-cols-2">
+        <Gallery images={images} active={active} shot={shot} setShot={setShot} gallery={gallery} title={product.title} />
+        <div className="lg:sticky lg:top-36 lg:self-start">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              {pct > 0 ? <p className="text-sm font-bold text-[#c4301c]">Save {pct}%</p> : null}
+              <h1 className="text-3xl font-bold sm:text-4xl">{product.title}</h1>
+              <p className="mt-1 text-sm text-[#666]">
+                Vendor: Garace · Type: {product.type} · SKU: {product.sku}
+              </p>
+            </div>
+            <button type="button" aria-label="Save" onClick={() => store.toggleWish(product.handle)} className={store.wished(product.handle) ? "text-[#c4301c]" : ""}>
+              <Heart filled={store.wished(product.handle)} />
+            </button>
+          </div>
+          <div className="mt-3 flex items-center gap-3">
+            <Stars value={product.rating} />
+            <span className="text-sm text-[#666]">{product.rating} · {product.reviews} reviews</span>
+          </div>
+          <div className="mt-4 text-2xl">
+            <Money amount={variant.price} compare={variant.compare} />
+          </div>
+          <div className="mt-4 flex flex-wrap gap-4 text-sm font-semibold">
+            {["Modern", "Eco-certified", "Warranty"].map((t) => (
+              <span key={t} className="inline-flex items-center gap-2">
+                <span className="grid h-8 w-8 place-items-center rounded-full bg-[#ededed] text-[#1d349a]">✦</span>
+                {t}
+              </span>
+            ))}
+          </div>
+          {product.stock > 0 && product.stock <= 5 && !coming ? (
+            <p className="mt-4 text-sm font-bold text-[#c4301c]">Hurry up, only {product.stock} items left in stock.</p>
+          ) : null}
+          <p className="mt-3 text-sm text-[#444]">{product.desc}</p>
+          <p className="mt-3 rounded-2xl bg-[#f4f691] px-4 py-3 text-sm font-semibold">Limited offer: $20 off orders past $1,000 — applied automatically at checkout.</p>
+
+          {colors ? (
+            <div className="mt-5">
+              <p className="mb-2 text-sm font-bold">Color: {color}</p>
+              <div className="flex flex-wrap gap-2">
+                {colors.values.map((c) => (
+                  <Swatch
+                    key={c}
+                    name={c}
+                    active={color === c}
+                    mode={swatch}
+                    image={findVariant(product, c).image || product.images[0]}
+                    onClick={() => {
+                      setColor(c);
+                      setShot(0);
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {other ? (
+            <div className="mt-4">
+              <p className="mb-2 text-sm font-bold">{other.name}</p>
+              <div className="flex flex-wrap gap-2">
+                {other.values.map((m) => {
+                  const v = findVariant(product, color, m);
+                  const off = !v.available;
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setMat(m)}
+                      className={cn(
+                        "rounded-full border px-4 py-2 text-sm font-semibold",
+                        mat === m ? "border-black bg-black text-white" : "border-[#e5e5e5]",
+                        off && "line-through opacity-50",
+                      )}
+                    >
+                      {m}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
+          <div className="mt-5 rounded-2xl border border-[#eee] p-4 text-sm">
+            <p className="font-bold">Volume pricing</p>
+            <p className="text-[#666]">5+ save 5% · 10+ save 10% on this piece. Discount shows in the cart.</p>
+          </div>
+
+          {coming || sold ? (
+            <form
+              className="mt-5"
+              onSubmit={(e) => {
+                e.preventDefault();
+                setNoted(true);
+              }}
+            >
+              <p className="mb-2 text-sm font-bold">{coming ? "Coming soon — get notified" : "Sold out — join the waitlist"}</p>
+              {noted ? (
+                <p className="text-sm font-semibold text-[#0d8756]">We’ll write when it’s back.</p>
+              ) : (
+                <div className="flex gap-2">
+                  <input required type="email" value={notify} onChange={(e) => setNotify(e.target.value)} placeholder="Email" className="h-12 flex-1 rounded-full bg-[#ededed] px-4 outline-none" />
+                  <Btn type="submit">Notify me</Btn>
+                </div>
+              )}
+            </form>
+          ) : (
+            <div className="mt-5 flex flex-wrap items-center gap-3">
+              <Qty value={qty} onChange={setQty} label={product.title} />
+              <Btn className="min-w-44" onClick={() => store.add(product.handle, variant.id, qty)}>
+                Add to cart
+              </Btn>
+              <Btn variant="ghost" to="/checkout" onClick={() => store.add(product.handle, variant.id, qty)}>
+                Buy now
+              </Btn>
+            </div>
+          )}
+
+          <ul className="mt-5 space-y-1 text-sm text-[#444]">
+            <li>Free international shipping over $500</li>
+            <li>Free returns within 30 days</li>
+            <li>In-store pickup from New York, Miami, and Los Angeles</li>
+          </ul>
+          <form
+            className="mt-4 flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              setEta(zip ? `Arrives in 4–7 days to ${zip}` : "");
+            }}
+          >
+            <input value={zip} onChange={(e) => setZip(e.target.value)} placeholder="Estimate delivery ZIP" className="h-11 flex-1 rounded-full bg-[#ededed] px-4 text-sm outline-none" />
+            <button className="h-11 rounded-full bg-[#ededed] px-4 text-sm font-bold">Check</button>
+          </form>
+          {eta ? <p className="mt-2 text-sm font-semibold">{eta}</p> : null}
+          <div className="mt-4 flex gap-3 text-sm font-bold">
+            <button type="button" className="underline" onClick={() => store.toggleCompare(product.handle)}>
+              {store.compare.includes(product.handle) ? "In compare" : "Add to compare"}
+            </button>
+            <Link to="/pages/find-a-store" className="underline">
+              Find in store
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-14 border-t pt-8">
+        <div className="flex gap-6 border-b">
+          {["Description", "Specifications", "Shipping", "Reviews"].map((t) => (
+            <button key={t} type="button" onClick={() => setTab(t)} className={cn("pb-3 text-sm font-bold", tab === t ? "border-b-2 border-black" : "text-[#888]")}>
+              {t}
+            </button>
+          ))}
+        </div>
+        <div className="max-w-3xl py-6 text-sm leading-relaxed text-[#444]">
+          {tab === "Description" ? <p>{product.desc} Designed to sit beside other Garace pieces without matching them. The finish is meant to be lived with — a mark is a history, not a defect.</p> : null}
+          {tab === "Specifications" ? (
+            <table className="w-full text-left">
+              <tbody>
+                {[
+                  ["Brand", "Garace"],
+                  ["Origin", product.origin],
+                  ["Dimensions", product.dims],
+                  ["Seat height", product.seat],
+                  ["Weight", product.weight],
+                  ["SKU", product.sku],
+                ].map(([k, v]) => (
+                  <tr key={k} className="border-b border-[#eee]">
+                    <th className="py-3 pr-4 font-bold text-black">{k}</th>
+                    <td>{v}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : null}
+          {tab === "Shipping" ? (
+            <p>Most in-stock pieces leave within 3–5 business days. Express is free over $500. White-glove delivery is available in New York, Miami, and Los Angeles. Large furniture ships in a recyclable crate.</p>
+          ) : null}
+          {tab === "Reviews" ? (
+            <div className="space-y-4">
+              {[
+                ["Quiet and exact", "The proportions are better in the room than in the photograph. Sat in it for a week and it still looks new."],
+                ["Worth the wait", "Delivery was careful. The oak has a warmth the swatch only hinted at."],
+                ["Trade order", "We specified six for a project. Volume pricing was clear and the finish matched across the set."],
+              ].map(([t, b]) => (
+                <div key={t} className="rounded-2xl bg-[#f7f7f7] p-4">
+                  <Stars value={5} />
+                  <p className="mt-1 font-bold text-black">{t}</p>
+                  <p>{b}</p>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <section className="mt-10 grid gap-6 rounded-3xl bg-[#f7f7f7] p-6 sm:p-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#1d349a]">Craftsmanship</p>
+          <h2 className="mt-2 text-3xl font-bold">Make it yours</h2>
+          <p className="mt-2 text-sm text-[#555]">
+            Personalize your furniture to match your unique style, with customizable options for colors, finishes, materials, and fabrics.
+          </p>
+          <div className="mt-6 space-y-4">
+            {[
+              ["01", "FSC & EU Ecolabel timber", "Responsibly harvested solid oak and ash kiln-dried for decades of stability."],
+              ["02", "Architectural joinery", "Precision-milled hardware and concealed fasteners engineered for daily commercial & home use."],
+              ["03", "Made to age gracefully", "Hand-rubbed oils, woven textiles, and powder-coated steel finished in small batches."],
+            ].map(([num, h, body]) => (
+              <div key={num} className="flex gap-4 rounded-2xl bg-white p-4">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#1d349a] text-xs font-bold text-white">
+                  {num}
+                </span>
+                <div>
+                  <p className="font-bold">{h}</p>
+                  <p className="text-sm text-[#666]">{body}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="overflow-hidden rounded-3xl">
+          <img
+            src={file("lookbook-slider-2-v2.jpg", 1200)}
+            alt="Styled interior space"
+            className="h-full max-h-[480px] w-full object-cover"
+            referrerPolicy="no-referrer"
+          />
+        </div>
+      </section>
+
+      <div className="mt-12">
+        <h2 className="mb-5 text-2xl font-bold">You may also like</h2>
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {more.map((p) => (
+            <ProductCard key={p.handle} product={p} swatch={swatch} />
+          ))}
+        </div>
+      </div>
+
+      {showSticky && !coming && !sold ? (
+        <div
+          className={cn(
+            "fixed inset-x-0 z-30 border-t border-[#e5e5e5] bg-white/95 px-4 py-3 shadow-[0_-8px_24px_rgba(0,0,0,0.06)] backdrop-blur",
+            store.compare.length > 0 ? "bottom-[68px]" : "bottom-0",
+          )}
+        >
+          <div className="mx-auto flex max-w-[1680px] items-center justify-between gap-4 sm:px-6 lg:px-10">
+            <div className="flex min-w-0 items-center gap-3">
+              <img
+                src={img(active, 120)}
+                alt=""
+                className="h-12 w-12 shrink-0 rounded-xl bg-[#f3f3f3] object-cover"
+                referrerPolicy="no-referrer"
+              />
+              <div className="min-w-0">
+                <p className="truncate font-bold">{product.title}</p>
+                <p className="truncate text-xs text-[#666]">{variant.title}</p>
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-4">
+              <Money amount={variant.price} compare={variant.compare} className="hidden sm:inline-flex" />
+              <Btn className="h-10 px-5 text-sm" onClick={() => store.add(product.handle, variant.id, qty)}>
+                Add to cart
+              </Btn>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function Gallery({
+  images,
+  active,
+  shot,
+  setShot,
+  gallery,
+  title,
+}: {
+  images: string[];
+  active: string;
+  shot: number;
+  setShot: (n: number) => void;
+  gallery: string;
+  title: string;
+}) {
+  if (gallery === "grid") {
+    return (
+      <div className="grid grid-cols-2 gap-3">
+        {images.map((src, i) => (
+          <img key={src + i} src={img(src, 900)} alt={title} className="aspect-square w-full rounded-2xl object-cover bg-[#f3f3f3]" referrerPolicy="no-referrer" />
+        ))}
+      </div>
+    );
+  }
+  if (gallery === "mix") {
+    return (
+      <div className="grid grid-cols-2 gap-3">
+        <img src={img(images[0], 1000)} alt={title} className="col-span-2 aspect-[4/3] w-full rounded-2xl object-cover bg-[#f3f3f3]" referrerPolicy="no-referrer" />
+        {images.slice(1).map((src, i) => (
+          <img key={src + i} src={img(src, 700)} alt="" className="aspect-square w-full rounded-2xl object-cover bg-[#f3f3f3]" referrerPolicy="no-referrer" />
+        ))}
+      </div>
+    );
+  }
+  const thumbs = (
+    <div className={cn("flex gap-2", gallery === "vertical" ? "flex-col" : "mt-3 flex-row")}>
+      {images.map((src, i) => (
+        <button key={src + i} type="button" onClick={() => setShot(i)} className={cn("overflow-hidden rounded-xl bg-[#f3f3f3]", gallery === "vertical" ? "h-20 w-20" : "h-16 w-16", i === shot && "ring-2 ring-black")}>
+          <img src={img(src, 160)} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+        </button>
+      ))}
+    </div>
+  );
+  return (
+    <div className={cn(gallery === "vertical" && "flex gap-3")}>
+      {gallery === "vertical" ? thumbs : null}
+      <div className="relative min-w-0 flex-1 overflow-hidden rounded-3xl bg-[#f3f3f3]">
+        <img src={img(active, 1400)} alt={title} className="aspect-square w-full object-cover" referrerPolicy="no-referrer" />
+      </div>
+      {gallery !== "vertical" ? thumbs : null}
+    </div>
+  );
+}
+
+export function SearchPage() {
+  const [params] = useSearchParams();
+  const q = params.get("q") || "";
+  const type = params.get("type") || "All Categories";
+  const hits = products.filter((p) => {
+    const okType = !type || type === "All Categories" || p.type === type;
+    const okQ = !q || `${p.title} ${p.type} ${p.tags.join(" ")}`.toLowerCase().includes(q.toLowerCase());
+    return okType && okQ;
+  });
+  return (
+    <div className="mx-auto max-w-[1680px] px-4 py-10 sm:px-6 lg:px-10">
+      <h1 className="text-3xl font-bold">Search {q ? `“${q}”` : ""}</h1>
+      <p className="mt-1 text-sm text-[#666]">{hits.length} results {type !== "All Categories" ? `in ${type}` : ""}</p>
+      <div className="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {hits.map((p) => (
+          <ProductCard key={p.handle} product={p} />
+        ))}
+      </div>
+      {hits.length === 0 ? <p className="py-16 text-[#666]">Nothing matched. Try “chair”, “lamp”, or “table”.</p> : null}
+    </div>
+  );
+}
+
+export function CheckoutPage() {
+  const s = useStore();
+  const [placed, setPlaced] = useState<string | null>(null);
+  useEffect(() => {
+    s.setCartOpen(false);
+    // close the drawer once on arrival
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [ship, setShip] = useState(s.subtotal >= 500 ? "express" : "standard");
+  const shipping = ship === "express" ? (s.subtotal >= 500 ? 0 : 45) : ship === "pickup" ? 0 : 29;
+  const extra = s.subtotal >= 1000 ? 20 : 0;
+  const due = Math.max(0, s.total + shipping - extra);
+  if (placed) {
+    return (
+      <div className="mx-auto max-w-xl px-6 py-24 text-center">
+        <p className="text-sm font-bold uppercase tracking-[0.16em] text-[#1d349a]">Order confirmed</p>
+        <h1 className="mt-2 text-4xl font-bold">Thank you</h1>
+        <p className="mt-3 text-[#555]">Order {placed} is in the studio queue. A note is on its way to your inbox.</p>
+        <Btn to="/" className="mt-6">
+          Back to Garace
+        </Btn>
+      </div>
+    );
+  }
+  return (
+    <div className="mx-auto grid max-w-5xl gap-10 px-4 py-10 lg:grid-cols-[1.2fr_.8fr] sm:px-6">
+      <form
+        className="space-y-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const id = `GR${Math.floor(100000 + Math.random() * 899999)}`;
+          s.clearCart();
+          setPlaced(id);
+        }}
+      >
+        <h1 className="text-3xl font-bold">Checkout</h1>
+        <Field name="email" label="Email" type="email" />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field name="first" label="First name" />
+          <Field name="last" label="Last name" />
+        </div>
+        <Field name="address" label="Address" />
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Field name="city" label="City" />
+          <Field name="region" label="State" />
+          <Field name="zip" label="ZIP" />
+        </div>
+        <fieldset className="space-y-2 rounded-2xl border border-[#eee] p-4">
+          <legend className="px-1 text-sm font-bold">Shipping</legend>
+          {[
+            ["standard", "Standard — $29"],
+            ["express", s.subtotal >= 500 ? "Express — Free over $500" : "Express — $45"],
+            ["pickup", "In-store pickup — Free"],
+          ].map(([id, label]) => (
+            <label key={id} className="flex items-center gap-2 text-sm">
+              <input type="radio" name="ship" checked={ship === id} onChange={() => setShip(id)} /> {label}
+            </label>
+          ))}
+        </fieldset>
+        <fieldset className="space-y-3 rounded-2xl border border-[#eee] p-4">
+          <legend className="px-1 text-sm font-bold">Payment</legend>
+          <Field name="card" label="Card number" placeholder="4242 4242 4242 4242" />
+          <div className="grid grid-cols-2 gap-3">
+            <Field name="exp" label="Expiry" placeholder="12 / 28" />
+            <Field name="cvc" label="CVC" placeholder="123" />
+          </div>
+        </fieldset>
+        <Btn type="submit" className="w-full" disabled={s.cart.length === 0}>
+          {s.cart.length === 0 ? "Cart is empty" : `Pay ${due.toFixed(2)}`}
+        </Btn>
+      </form>
+      <aside className="h-fit rounded-3xl bg-[#f7f7f7] p-5">
+        {s.cart.map((l) => {
+          const p = getProduct(l.handle);
+          if (!p) return null;
+          return (
+            <div key={l.variantId} className="mb-3 flex items-center gap-3">
+              <img src={img(p.images[0], 120)} alt="" className="h-16 w-16 rounded-xl object-cover" referrerPolicy="no-referrer" />
+              <div className="flex-1 text-sm">
+                <p className="font-bold">{p.title}</p>
+                <p className="text-[#666]">Qty {l.qty}</p>
+              </div>
+              <Money amount={(p.variants.find((v) => v.id === l.variantId)?.price ?? 0) * l.qty} />
+            </div>
+          );
+        })}
+        <div className="mt-4 space-y-1 border-t pt-3 text-sm">
+          <Row k="Subtotal" v={<Money amount={s.subtotal} />} />
+          {s.discount > 0 ? <Row k="Discounts" v={<span>−{s.discount.toFixed(2)}</span>} /> : null}
+          {extra ? <Row k="Order offer" v={<span>−$20.00</span>} /> : null}
+          <Row k="Shipping" v={<span>{shipping === 0 ? "Free" : `$${shipping}`}</span>} />
+          <div className="flex justify-between pt-2 text-base font-bold">
+            <span>Total</span>
+            <span>${due.toFixed(2)}</span>
+          </div>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function Field({ name, label, type = "text", placeholder }: { name: string; label: string; type?: string; placeholder?: string }) {
+  return (
+    <label className="block text-sm">
+      <span className="mb-1 block font-bold">{label}</span>
+      <input required name={name} type={type} placeholder={placeholder} className="h-12 w-full rounded-2xl border border-[#e5e5e5] px-4 outline-none focus:border-black" />
+    </label>
+  );
+}
+
+function Row({ k, v }: { k: string; v: ReactNode }) {
+  return (
+    <div className="flex justify-between">
+      <span>{k}</span>
+      <span>{v}</span>
+    </div>
+  );
+}
+========== PRODUCT CARD ==========
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import {
+  badges,
+  colorOption,
+  findVariant,
+  img,
+  priceRange,
+  type Product,
+} from "@/data/catalog";
+import { useStore } from "@/context/Store";
+import { Heart, Money, Swatch } from "./ui";
+import { cn } from "@/utils/cn";
+
+export function ProductCard({
+  product,
+  layout = "grid",
+  swatch = "color",
+}: {
+  product: Product;
+  layout?: "grid" | "list";
+  swatch?: "color" | "image";
+}) {
+  const { add, toggleWish, wished, toggleCompare, compare, setQuick } = useStore();
+  const nav = useNavigate();
+  const [hover, setHover] = useState(false);
+  const colors = colorOption(product);
+  const [color, setColor] = useState(colors?.values[0]);
+  const variant = findVariant(product, color);
+  const range = priceRange(product);
+  const shot = variant.image || product.images[0];
+  const alt = product.images.find((i) => i !== shot) || product.images[1];
+  const marks = badges(product);
+  const coming = product.tags.includes("Coming Soon") || product.stock === 0;
+  const saved = wished(product.handle);
+  const compared = compare.includes(product.handle);
+
+  const choose = () => {
+    if (coming) {
+      nav(`/products/${product.handle}`);
+      return;
+    }
+    if ((product.options[0]?.values.length ?? 0) > 1) setQuick(product.handle);
+    else add(product.handle, variant.id, 1);
+  };
+
+  return (
+    <article
+      className={cn("group", layout === "list" && "grid grid-cols-[180px_1fr] gap-5 sm:grid-cols-[240px_1fr]")}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+    >
+      <div className="relative overflow-hidden rounded-2xl bg-[#f3f3f3]">
+        <Link to={`/products/${product.handle}`} className="block aspect-square">
+          <img
+            src={img(shot, 800)}
+            alt={product.title}
+            referrerPolicy="no-referrer"
+            className={cn(
+              "h-full w-full object-cover transition duration-500",
+              hover && alt ? "opacity-0" : "opacity-100",
+              hover && "scale-[1.03]",
+            )}
+          />
+          {alt ? (
+            <img
+              src={img(alt, 800)}
+              alt=""
+              referrerPolicy="no-referrer"
+              className={cn(
+                "absolute inset-0 h-full w-full object-cover transition duration-500",
+                hover ? "opacity-100" : "opacity-0",
+              )}
+            />
+          ) : null}
+        </Link>
+        <div className="absolute left-3 top-3 flex flex-col items-start gap-1.5">
+          {marks.map((b) => (
+            <span
+              key={b.label}
+              className="rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white"
+              style={{ background: b.bg }}
+            >
+              {b.label}
+            </span>
+          ))}
+        </div>
+        <div className="absolute right-3 top-3 flex flex-col gap-2 opacity-0 transition group-hover:opacity-100">
+          <button
+            type="button"
+            aria-label="Quick view"
+            onClick={() => setQuick(product.handle)}
+            className="grid h-10 w-10 place-items-center rounded-full bg-white shadow-sm"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+              <path d="M2 12s4-6 10-6 10 6 10 6-4 6-10 6S2 12 2 12z" />
+              <circle cx="12" cy="12" r="2.5" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            aria-label="Wishlist"
+            onClick={() => toggleWish(product.handle)}
+            className={cn("grid h-10 w-10 place-items-center rounded-full bg-white shadow-sm", saved && "text-[#c4301c]")}
+          >
+            <Heart filled={saved} />
+          </button>
+        </div>
+        <label className="absolute bottom-3 left-3 z-10 flex cursor-pointer items-center gap-2 rounded-full bg-white/95 px-2.5 py-1 text-[12px] font-semibold shadow-sm transition-transform duration-300 group-hover:-translate-y-12">
+          <input
+            type="checkbox"
+            checked={compared}
+            onChange={() => toggleCompare(product.handle)}
+            className="accent-black"
+          />
+          Compare
+        </label>
+        <button
+          type="button"
+          onClick={choose}
+          className="pointer-events-none absolute inset-x-3 bottom-3 h-11 translate-y-3 rounded-full bg-black text-sm font-bold text-white opacity-0 transition group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100"
+        >
+          {coming ? "View product" : product.variants.length > 1 ? "Choose options" : "Add to cart"}
+        </button>
+      </div>
+      <div className={cn("pt-3", layout === "list" && "flex flex-col justify-center pt-0")}>
+        <p className="text-[12px] font-semibold uppercase tracking-wide text-[#888]">{product.type}</p>
+        <Link to={`/products/${product.handle}`} className="mt-0.5 block font-semibold leading-snug hover:underline">
+          {product.title}
+        </Link>
+        <div className="mt-1">
+          <Money amount={range.min} compare={!range.from ? range.compare : null} />
+          {range.from ? <span className="ml-1 text-[13px] text-[#666]">from</span> : null}
+        </div>
+        {colors && colors.values.length > 0 ? (
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
+            {colors.values.slice(0, 5).map((c) => {
+              const v = findVariant(product, c);
+              return (
+                <Swatch
+                  key={c}
+                  name={c}
+                  active={color === c}
+                  mode={swatch}
+                  image={v.image || product.images[0]}
+                  onClick={() => setColor(c)}
+                />
+              );
+            })}
+            {colors.values.length > 5 ? (
+              <span className="text-xs text-[#666]">+{colors.values.length - 5}</span>
+            ) : null}
+          </div>
+        ) : null}
+        {layout === "list" ? (
+          <p className="mt-3 max-w-xl text-sm text-[#666]">{product.desc}</p>
+        ) : null}
+      </div>
+    </article>
+  );
+}
+========== PRODUCT CATALOG ==========
+import raw from "./products.json";
+
+export type Variant = {
+  id: number;
+  title: string;
+  option1: string | null;
+  option2: string | null;
+  price: number;
+  compare: number | null;
+  available: boolean;
+  image: string | null;
+};
+
+export type Product = {
+  id: number;
+  handle: string;
+  title: string;
+  type: string;
+  tags: string[];
+  images: string[];
+  options: { name: string; values: string[] }[];
+  variants: Variant[];
+  desc: string;
+  stock: number;
+  rating: number;
+  reviews: number;
+  dims: string;
+  weight: string;
+  seat: string;
+  origin: string;
+  sku: string;
+};
+
+export const products = raw as Product[];
+export const byHandle = Object.fromEntries(products.map((p) => [p.handle, p]));
+
+export function getProduct(handle?: string) {
+  return handle ? byHandle[handle] : undefined;
+}
+
+export function img(src?: string | null, w = 900) {
+  if (!src) return "";
+  return `${src.split("?")[0]}?width=${w}`;
+}
+
+export const FILE = "https://hyper-theme-demo.myshopify.com/cdn/shop/files";
+export function file(name: string, w = 1400) {
+  return `${FILE}/${name}?width=${w}`;
+}
+
+export const LOGO =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPAAAAApCAMAAAA8ulRHAAAAJGVYSWZJSSoACAAAAAEAPAECAAkAAAAaAAAAAAAAAGltYWdlcnk0AAAnPYy6AAAANlBMVEUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAC3dmhyAAAAEXRSTlMAgEAg37+gYO9wEJCPUDDPr9Wzce8AAAJ2SURBVGje5dnbmqsgDAXgQALisfr+L7svdSGY4dBvz3yuu5mmlN+mgkrHGUOpxBX7cYmlVMYjeo8/HiJuH6Nx+PhJvF4bPm4ZGDml4Emuk53oHg7XCgJwVu25JxjzGbgBTPa4ZKF73LWAT7ASzz3BGDENYJqhqZ8beqQTrEW2rmCMcD2YPk9NzQHmBGAta2cwHs5qMJqWh4YWLgMH7g2GyVSDacw09f0lAOtxfcEYVwtGATY1B6VcydAXjLHVYFybllxDUwIcLGb0Ab6FG2K2ubBau84Cg9eDcW2yyYYOnAILxWHYykwxYqB89FpcUrgajAPJlGrokXTwvV2GvmDsuaEejAMtif950sDJvph7gy0MXg/Gb9PeJi6cAStz9r3BEwzeAKYBmvp+CH4J+Dp/1wSmOWpqB5W/Ebzjn+JSAUb+ZGOxoakEbJ9+w7tJZ6z4DXsE6zH5sWQLsCKVgH18budDj+jg++CNYFx2YeACMPJsZ/AAg7eCyWX2fCVgK7Dx6Aq2Ht/SDOaQmgo/gS1kWFx0rFrAQTDR7Hw7mNZE1UY5sB6uB+vhDmCalaIysKcvgg31AE9ym0g9WPiLYENdwLRhSeB6sHACIS4dXwg2Dfe0MGN0BV8NdpOye8IUgcVSH/D9GqkWLKesO1hWom5gPFPbOnDwluh74MBdwbYILFGcn4eNILVgvMVzXT/c/wMLKel2tTTBZvcFYFqhqV8AhrPp/gYw7PTXvwL+uGxYAZOBu1B/BPwQDYyP/ZY3gPF5wQvA0fOCF4BhMV5eAMZ7WtsLwLAYf94Ajh/wmTPpyeoVfKlgSmWF++d6JvOjTHHtpny4GekfuZxPRmrHboYAAAAASUVORK5CYII=";
+
+export const COLORS: Record<string, string> = {
+  "Light Beige": "#E6D5C1",
+  Yellow: "#E2B23C",
+  Black: "#1A1A1A",
+  Brown: "#8B5A3C",
+  Chocolate: "#5C3317",
+  Grey: "#B5B5B5",
+  Gray: "#B5B5B5",
+  "Soft Green": "#B7C7A6",
+  Red: "#C44536",
+  Charcoal: "#3C3C3C",
+  Blue: "#4E6E96",
+  Orange: "#E07A3D",
+  "Navy Blue": "#1D349A",
+  Olive: "#6B7043",
+  Pine: "#3D5C46",
+  Oak: "#C4A574",
+  Wool: "#D8D2CA",
+  Textile: "#E7DFD4",
+};
+
+export const CURRENCIES = [
+  { code: "USD", label: "United States", symbol: "$", rate: 1 },
+  { code: "AUD", label: "Australia", symbol: "A$", rate: 1.52 },
+  { code: "EUR", label: "Eurozone", symbol: "€", rate: 0.92 },
+  { code: "GBP", label: "United Kingdom", symbol: "£", rate: 0.78 },
+  { code: "CAD", label: "Canada", symbol: "C$", rate: 1.36 },
+  { code: "JPY", label: "Japan", symbol: "¥", rate: 151 },
+  { code: "SGD", label: "Singapore", symbol: "S$", rate: 1.34 },
+  { code: "AED", label: "United Arab Emirates", symbol: "AED ", rate: 3.67 },
+  { code: "CHF", label: "Switzerland", symbol: "CHF ", rate: 0.88 },
+  { code: "KRW", label: "South Korea", symbol: "₩", rate: 1380 },
+];
+
+export function formatMoney(amount: number, code = "USD") {
+  const c = CURRENCIES.find((x) => x.code === code) ?? CURRENCIES[0];
+  const v = amount * c.rate;
+  if (c.code === "JPY" || c.code === "KRW") {
+    return `${c.symbol}${Math.round(v).toLocaleString()}`;
+  }
+  return `${c.symbol}${v.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+export function priceRange(p: Product) {
+  const prices = p.variants.map((v) => v.price);
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
+  const compare =
+    p.variants.find((v) => v.compare && v.compare > v.price)?.compare ?? null;
+  return { min, max, compare, from: min !== max };
+}
+
+export function isSale(p: Product) {
+  return p.variants.some((v) => v.compare && v.compare > v.price);
+}
+
+export function discountPct(price: number, compare?: number | null) {
+  if (!compare || compare <= price) return 0;
+  return Math.round((1 - price / compare) * 100);
+}
+
+export type Badge = { label: string; bg: string };
+
+export function badges(p: Product): Badge[] {
+  const out: Badge[] = [];
+  if (p.tags.includes("Coming Soon")) out.push({ label: "Coming Soon", bg: "#7A34D6" });
+  else if (p.stock === 0) out.push({ label: "Sold Out", bg: "#ADADAD" });
+  else if (isSale(p)) out.push({ label: "Sale", bg: "#C4301C" });
+  if (p.tags.includes("New")) out.push({ label: "New", bg: "#0d8756" });
+  if (p.stock > 0 && p.stock <= 3) out.push({ label: "Selling Fast", bg: "#1d349a" });
+  else if (p.tags.includes("Best Choice!")) out.push({ label: "Best Choice!", bg: "#1d349a" });
+  return out.slice(0, 2);
+}
+
+export function colorOption(p: Product) {
+  return p.options.find((o) => /color|colour/i.test(o.name));
+}
+
+export function materialOption(p: Product) {
+  return p.options.find((o) => /material|denomination/i.test(o.name) || o.name !== colorOption(p)?.name);
+}
+
+export function findVariant(p: Product, o1?: string | null, o2?: string | null) {
+  if (o1 && o2) {
+    return p.variants.find((v) => v.option1 === o1 && v.option2 === o2) ?? p.variants[0];
+  }
+  if (o1) return p.variants.find((v) => v.option1 === o1) ?? p.variants[0];
+  if (o2) return p.variants.find((v) => v.option2 === o2 || v.option1 === o2) ?? p.variants[0];
+  return p.variants[0];
+}
+
+export function pickVariant(p: Product, selected: Record<string, string>) {
+  return (
+    p.variants.find((v) =>
+      p.options.every((opt, idx) => {
+        const want = selected[opt.name];
+        if (!want) return true;
+        const got = idx === 0 ? v.option1 : v.option2;
+        return got === want;
+      }),
+    ) ?? p.variants[0]
+  );
+}
+
+export function related(p: Product, n = 4) {
+  return products.filter((x) => x.handle !== p.handle && x.type === p.type).slice(0, n);
+}
+
+export type Collection = {
+  handle: string;
+  title: string;
+  image: string;
+  blurb: string;
+  match: (p: Product) => boolean;
+};
+
+const hasType = (...types: string[]) => (p: Product) => types.includes(p.type);
+const titleHas = (re: RegExp) => (p: Product) => re.test(p.title);
+const decorTypes = ["Accessories", "Candles", "Vases", "Pillows", "Towels", "Planters", "Bowls", "Rugs", "Ottomans"];
+
+export const collections: Collection[] = [
+  {
+    handle: "all",
+    title: "All Products",
+    image: "collection-slider-6.jpg",
+    blurb: "The full Garace collection — furniture, lighting, and objects for considered rooms.",
+    match: () => true,
+  },
+  {
+    handle: "sale-items",
+    title: "Sale Items",
+    image: "collection-sales.webp",
+    blurb: "Studio pieces currently marked down. Same materials, a sharper number.",
+    match: isSale,
+  },
+  {
+    handle: "tables",
+    title: "Press Tables",
+    image: "collection-slider-1.jpg",
+    blurb: "Dining, coffee, and side tables with a precise edge and a quiet stance.",
+    match: hasType("Tables"),
+  },
+  {
+    handle: "lighting",
+    title: "Lighting",
+    image: "collection-slider-2.jpg",
+    blurb: "Lamps shaped like objects. Warm light for reading, dining, and late rooms.",
+    match: hasType("Lamps"),
+  },
+  {
+    handle: "sofas",
+    title: "Spoke Sofa",
+    image: "collection-slider-3.jpg",
+    blurb: "Low lines, deep seats, upholstery that keeps its shape.",
+    match: hasType("Sofas", "Sofa"),
+  },
+  {
+    handle: "storage",
+    title: "Storage",
+    image: "collection-slider-4.jpg",
+    blurb: "Shelves, racks, and sideboards that read as architecture.",
+    match: (p) =>
+      ["Rack Wall", "Floating Wall"].includes(p.type) || /shelf|sideboard|storage|rack/i.test(p.title),
+  },
+  {
+    handle: "turn-chairs",
+    title: "Turn Chairs",
+    image: "collection-slider-5.jpg",
+    blurb: "A swivel seat with a calm profile — for desks, dining, and the in-between.",
+    match: titleHas(/turn/i),
+  },
+  {
+    handle: "chairs",
+    title: "Chairs",
+    image: "collection-slider-6.jpg",
+    blurb: "Dining, lounge, and work chairs from the Garace seating library.",
+    match: hasType("Chairs", "Armchairs"),
+  },
+  {
+    handle: "curve",
+    title: "Curve Coat",
+    image: "collection-slider-7.jpg",
+    blurb: "Arc silhouettes — chairs, racks, and shelves drawn from a single curve.",
+    match: titleHas(/arc|coat/i),
+  },
+  {
+    handle: "bend-chairs",
+    title: "Bend Chairs",
+    image: "collection-slider-8.jpg",
+    blurb: "Seats with a bent line and a soft landing.",
+    match: (p) => hasType("Chairs", "Armchairs")(p) && /lounge|club|cozy|plush|velvet/i.test(p.title),
+  },
+  {
+    handle: "accessories",
+    title: "Accessories",
+    image: "collection-slider-10.jpg",
+    blurb: "Objects with a large presence. Made to be used, not only displayed.",
+    match: (p) => decorTypes.includes(p.type),
+  },
+  {
+    handle: "dining-tables",
+    title: "Tables",
+    image: "collection-slider-16.jpg",
+    blurb: "Tables for gathering, working, and setting things down with intention.",
+    match: hasType("Tables", "Desks"),
+  },
+  {
+    handle: "bar-chairs",
+    title: "Bar Chairs",
+    image: "collection-slider-9.jpg",
+    blurb: "Counter and bar seating with the same finish standard as the rest of the house.",
+    match: hasType("Bar Stools"),
+  },
+  {
+    handle: "bow-chairs",
+    title: "Bow Chairs",
+    image: "collection-slider-5.jpg",
+    blurb: "The Bow and Cross seating family — understated frames, honest prices.",
+    match: (p) => /cross|bow|bar chair|line chair/i.test(p.title) || (hasType("Chairs")(p) && p.variants[0].price < 400),
+  },
+  {
+    handle: "desks",
+    title: "Desks",
+    image: "collection-slider-1.jpg",
+    blurb: "Work surfaces with the discipline of the collection.",
+    match: hasType("Desks"),
+  },
+  {
+    handle: "new",
+    title: "New Arrivals",
+    image: "collection-tabs-banner-1-v2.jpg",
+    blurb: "Traditional divides between personal and professional space, redrawn.",
+    match: (p) => p.tags.includes("New"),
+  },
+  {
+    handle: "hot",
+    title: "Hot Items",
+    image: "collection-slider-6.jpg",
+    blurb: "The pieces the studio keeps recommending.",
+    match: (p) => p.tags.includes("Best Choice!") || p.stock <= 4,
+  },
+  {
+    handle: "soft-stools",
+    title: "Soft Stools",
+    image: "collection-slider-9.jpg",
+    blurb: "Upholstered stools and low seats for kitchens and landings.",
+    match: (p) => hasType("Bar Stools", "Ottomans")(p) || /stool|ottoman|bench/i.test(p.title),
+  },
+  {
+    handle: "design",
+    title: "Design",
+    image: "collection-slider-3.jpg",
+    blurb: "Signature forms from the current season.",
+    match: (p) => /arc|loop|spoke|grid|cross/i.test(p.title),
+  },
+  {
+    handle: "living-room",
+    title: "Living Room",
+    image: "collection-tab-1-v2.jpg",
+    blurb: "Sofas, lounge chairs, tables, and the objects that finish a room.",
+    match: (p) =>
+      ["Sofas", "Sofa", "Chairs", "Armchairs", "Ottomans", "Tables", "Rugs", "Lamps", "Pillows"].includes(p.type),
+  },
+  {
+    handle: "dining-kitchen",
+    title: "Dining & Kitchen",
+    image: "slideshow-3_a5017f29-7d75-4e6a-9052-3a6b84946846.jpg",
+    blurb: "Highlighting the unique touches that set every piece apart.",
+    match: (p) => ["Tables", "Chairs", "Bar Stools", "Bowls", "Towels", "Vases"].includes(p.type),
+  },
+  {
+    handle: "bed-room",
+    title: "Bed Room",
+    image: "collection-tab-2-v2.jpg",
+    blurb: "Lighting, textiles, and quiet storage for the end of the day.",
+    match: (p) => ["Pillows", "Lamps", "Rugs", "Candles", "Ottomans"].includes(p.type),
+  },
+  {
+    handle: "work-room",
+    title: "Work Room",
+    image: "collection-tab-3-v2.jpg",
+    blurb: "Desks, task chairs, and shelves for a room that has to concentrate.",
+    match: (p) => ["Desks", "Chairs"].includes(p.type) || /desk|task|work|shelf/i.test(p.title),
+  },
+  {
+    handle: "outdoor",
+    title: "Outdoor",
+    image: "collection-slider-2.jpg",
+    blurb: "Planters, lighting, and pieces that can live closer to the weather.",
+    match: (p) => ["Planters"].includes(p.type) || /outdoor|planter/i.test(p.title + p.type),
+  },
+  {
+    handle: "rugs",
+    title: "Rugs",
+    image: "collection-slider-10.jpg",
+    blurb: "Woven fields that anchor a room without raising their voice.",
+    match: hasType("Rugs"),
+  },
+  {
+    handle: "candles",
+    title: "Candles",
+    image: "collection-slider-10.jpg",
+    blurb: "Slow burns for evenings rather than occasions.",
+    match: hasType("Candles"),
+  },
+  {
+    handle: "sofas-seating",
+    title: "Seating",
+    image: "collection-slider-6.jpg",
+    blurb: "Every seat in the collection, from counter stools to sofas.",
+    match: (p) => ["Chairs", "Armchairs", "Bar Stools", "Sofas", "Sofa", "Ottomans"].includes(p.type),
+  },
+];
+
+export function getCollection(handle?: string) {
+  return collections.find((c) => c.handle === handle);
+}
+
+export function collectionProducts(handle?: string) {
+  const c = getCollection(handle);
+  if (!c) return [];
+  return products.filter(c.match);
+}
+
+export type NavLink = { label: string; to: string };
+export type NavColumn = { title: string; links: NavLink[] };
+
+export const categoryColumns: NavColumn[] = [
+  {
+    title: "Furniture",
+    links: [
+      { label: "Sofas", to: "/collections/sofas" },
+      { label: "Tables & Desks", to: "/collections/dining-tables" },
+      { label: "Chair & Stools", to: "/collections/chairs" },
+      { label: "Shelves", to: "/collections/storage" },
+      { label: "Shop All", to: "/collections/all" },
+    ],
+  },
+  {
+    title: "Table & Desks",
+    links: [
+      { label: "Dining Tables", to: "/collections/tables" },
+      { label: "Coffee Table", to: "/collections/tables" },
+      { label: "Side Tables", to: "/collections/tables" },
+      { label: "Work Desk", to: "/collections/desks" },
+      { label: "Table Lamps", to: "/collections/lighting" },
+      { label: "Shop All", to: "/collections/dining-tables" },
+    ],
+  },
+  {
+    title: "Chair & Stools",
+    links: [
+      { label: "Dining Chairs", to: "/collections/chairs" },
+      { label: "Bar Stools", to: "/collections/bar-chairs" },
+      { label: "Office Chairs", to: "/collections/work-room" },
+      { label: "Arm Chairs", to: "/collections/bend-chairs" },
+      { label: "Shop All", to: "/collections/sofas-seating" },
+    ],
+  },
+  {
+    title: "Home & Decor",
+    links: [
+      { label: "Rugs", to: "/collections/rugs" },
+      { label: "Candles", to: "/collections/candles" },
+      { label: "Wall Decors", to: "/collections/storage" },
+      { label: "Mirrors", to: "/collections/accessories" },
+      { label: "Ottomans", to: "/collections/soft-stools" },
+      { label: "Floor Lamps", to: "/collections/lighting" },
+      { label: "Pillows", to: "/collections/accessories" },
+      { label: "Shop All", to: "/collections/accessories" },
+    ],
+  },
+];
+
+export const rooms: { label: string; to: string; links: NavLink[] }[] = [
+  {
+    label: "Living Room",
+    to: "/collections/living-room",
+    links: [
+      { label: "Tables & Desks", to: "/collections/tables" },
+      { label: "Sofas", to: "/collections/sofas" },
+      { label: "Chairs & Stools", to: "/collections/chairs" },
+      { label: "Storages & Cabinets", to: "/collections/storage" },
+      { label: "Bow Chairs", to: "/collections/bow-chairs" },
+      { label: "Cross Bar Chairs", to: "/collections/bow-chairs" },
+      { label: "Single Coffee Tables", to: "/collections/tables" },
+      { label: "Soft Bench", to: "/collections/soft-stools" },
+    ],
+  },
+  {
+    label: "Dining & Kitchen",
+    to: "/collections/dining-kitchen",
+    links: [
+      { label: "Dining Tables", to: "/collections/tables" },
+      { label: "Dining Chairs", to: "/collections/chairs" },
+      { label: "Bar Stools", to: "/collections/bar-chairs" },
+      { label: "Storages", to: "/collections/storage" },
+      { label: "Table Linens", to: "/collections/accessories" },
+      { label: "Dinnerware Sets", to: "/collections/accessories" },
+      { label: "Lighting", to: "/collections/lighting" },
+      { label: "Accessories", to: "/collections/accessories" },
+    ],
+  },
+  {
+    label: "Bed Room",
+    to: "/collections/bed-room",
+    links: [
+      { label: "Lighting", to: "/collections/lighting" },
+      { label: "Accessories", to: "/collections/accessories" },
+      { label: "Sofas", to: "/collections/sofas" },
+      { label: "Storages", to: "/collections/storage" },
+      { label: "Ottomans", to: "/collections/soft-stools" },
+    ],
+  },
+  {
+    label: "Work Room",
+    to: "/collections/work-room",
+    links: [
+      { label: "Desks", to: "/collections/desks" },
+      { label: "Office Chairs", to: "/collections/chairs" },
+      { label: "Bookshelves", to: "/collections/storage" },
+      { label: "Cabinets", to: "/collections/storage" },
+      { label: "Task Lamps", to: "/collections/lighting" },
+      { label: "Accessories", to: "/collections/accessories" },
+    ],
+  },
+  {
+    label: "Outdoor",
+    to: "/collections/outdoor",
+    links: [
+      { label: "Lighting", to: "/collections/lighting" },
+      { label: "Planters", to: "/collections/outdoor" },
+      { label: "Home & Decor", to: "/collections/accessories" },
+      { label: "Ottomans", to: "/collections/soft-stools" },
+    ],
+  },
+];
+
+export const pageLinks: NavColumn[] = [
+  {
+    title: "About",
+    links: [
+      { label: "About us", to: "/pages/about" },
+      { label: "Contact", to: "/pages/contact" },
+      { label: "FAQs", to: "/pages/faqs" },
+      { label: "Find a Store", to: "/pages/find-a-store" },
+      { label: "Blog", to: "/pages/blog" },
+    ],
+  },
+  {
+    title: "Collections",
+    links: [
+      { label: "Collections List", to: "/pages/collections" },
+      { label: "Left Banner", to: "/collections/chairs?layout=left" },
+      { label: "Right Banner", to: "/collections/tables?layout=right" },
+      { label: "With Background", to: "/collections/sofas?layout=bg" },
+      { label: "With Image Cards", to: "/collections/lighting?layout=cards" },
+      { label: "Without Banner", to: "/collections/accessories?layout=none" },
+    ],
+  },
+  {
+    title: "Product Gallery",
+    links: [
+      { label: "Vertical Thumbnails", to: "/products/arc-chair?gallery=vertical" },
+      { label: "Horizontal Thumbnails", to: "/products/arc-chair?gallery=horizontal" },
+      { label: "Grid 2 Columns", to: "/products/loop-sofa-armrest?gallery=grid" },
+      { label: "Grid Mix", to: "/products/swivel-table?gallery=mix" },
+    ],
+  },
+  {
+    title: "Customer Care",
+    links: [
+      { label: "Gift Card", to: "/products/hyper-gift-card" },
+      { label: "Product Compare", to: "/pages/compare" },
+      { label: "Wishlist", to: "/pages/wishlist" },
+      { label: "Theme Features", to: "/pages/theme-features" },
+    ],
+  },
+];
+
+export const featureLinks: NavLink[] = [
+  { label: "Product Color Swatch", to: "/products/arc-chair?swatch=color" },
+  { label: "Product Image Swatch", to: "/products/arc-chair?swatch=image" },
+  { label: "Product Flash Sale", to: "/products/arc-chair" },
+  { label: "Product Coming Soon", to: "/products/rio-ottoman" },
+  { label: "Product Out Of Stock", to: "/products/victoria-ottoman" },
+  { label: "On Sale", to: "/collections/sale-items" },
+  { label: "Quick Order List", to: "/pages/quick-order" },
+  { label: "Volume Pricing", to: "/products/dining-table-haven" },
+];
+
+export const circleCats = [
+  { title: "Sale Items", image: "collection-sales.webp", to: "/collections/sale-items" },
+  { title: "Press Tables", image: "collection-slider-1.jpg", to: "/collections/tables" },
+  { title: "Lighting", image: "collection-slider-2.jpg", to: "/collections/lighting" },
+  { title: "Spoke Sofa", image: "collection-slider-3.jpg", to: "/collections/sofas" },
+  { title: "Storage", image: "collection-slider-4.jpg", to: "/collections/storage" },
+  { title: "Turn Chairs", image: "collection-slider-5.jpg", to: "/collections/turn-chairs" },
+  { title: "Chairs", image: "collection-slider-6.jpg", to: "/collections/chairs" },
+  { title: "Curve Coat", image: "collection-slider-7.jpg", to: "/collections/curve" },
+  { title: "Bend Chairs", image: "collection-slider-8.jpg", to: "/collections/bend-chairs" },
+  { title: "Accessories", image: "collection-slider-10.jpg", to: "/collections/accessories" },
+  { title: "Tables", image: "collection-slider-16.jpg", to: "/collections/dining-tables" },
+  { title: "Bar Chairs", image: "collection-slider-9.jpg", to: "/collections/bar-chairs" },
+];
+
+export const searchTypes = [
+  "All Categories",
+  "Accessories",
+  "Armchairs",
+  "Bar Stools",
+  "Bowls",
+  "Candles",
+  "Chairs",
+  "Desks",
+  "Lamps",
+  "Ottomans",
+  "Pillows",
+  "Planters",
+  "Rugs",
+  "Sofas",
+  "Tables",
+  "Towels",
+  "Vases",
+];
+
+export const stores = [
+  {
+    city: "New York",
+    name: "Garace Studio",
+    address: "128 Wooster Street, SoHo, New York, NY 10012",
+    hours: "Mon–Sat 10–7, Sun 11–6",
+    phone: "+1 212-555-0148",
+  },
+  {
+    city: "Miami",
+    name: "Garace Miami",
+    address: "382 NE 191st St #87394, Miami, FL 33179",
+    hours: "Mon–Sat 9–6",
+    phone: "+1 888-234-1234",
+  },
+  {
+    city: "Los Angeles",
+    name: "Garace West",
+    address: "8475 Melrose Place, West Hollywood, CA 90069",
+    hours: "Tue–Sat 11–7, Sun 12–5",
+    phone: "+1 323-555-0190",
+  },
+  {
+    city: "London",
+    name: "Garace Marylebone",
+    address: "14 Chiltern Street, London W1U 7PJ",
+    hours: "Mon–Sat 10–6",
+    phone: "+44 20 7946 0321",
+  },
+  {
+    city: "Copenhagen",
+    name: "Garace Atelier",
+    address: "Studiestræde 21, 1455 København",
+    hours: "Tue–Fri 11–6, Sat 11–4",
+    phone: "+45 33 12 44 90",
+  },
+];
+
+export const posts = [
+  {
+    slug: "where-design-meets-function",
+    title: "Where design meets function",
+    date: "March 12, 2026",
+    excerpt: "How the studio thinks about rooms that have to work on a Tuesday and still feel like a photograph on Sunday.",
+    image: "home-iwt_1-v2.jpg",
+    body: "We start with the way a person actually sits, reaches, and sets a cup down. The photograph comes later. Garace pieces are drawn in New York and resolved with makers who still care about the underside of a table — the part nobody posts, and everybody lives with. This season we leaned into a lower line, a quieter oak, and upholstery that can take a decade of real evenings.",
+  },
+  {
+    slug: "a-room-in-three-pieces",
+    title: "A room in three pieces",
+    date: "February 2, 2026",
+    excerpt: "The sofa, the lamp, the table. A short argument for buying fewer things and placing them better.",
+    image: "lookbook-slider-1-v2.jpg",
+    body: "Most rooms do not need a collection. They need a seat you trust, a surface at the right height, and a light that does not shout. The Loop Sofa, the Swivel Table, and the Flip Lamp were designed to share a room without matching. Put them together and the space does the rest.",
+  },
+  {
+    slug: "materials-we-keep",
+    title: "Materials we keep",
+    date: "January 18, 2026",
+    excerpt: "Oak, wool, steel, glaze. A note on why the palette stays small.",
+    image: "multicolumn-3-v2.jpg",
+    body: "A small material library is a discipline. Oak that can be refinished. Wool that breathes. Steel that is meant to be seen. Glaze that is allowed to vary. We certify what we can, publish what a piece costs to make, and design for a longer lifetime rather than a louder launch.",
+  },
+];
+
+export const faqs = [
+  {
+    q: "Do you ship internationally?",
+    a: "Yes. Express shipping is free on orders over $500. Smaller orders ship at a flat rate calculated at checkout. Most pieces leave the studio within 3–5 business days.",
+  },
+  {
+    q: "What is your return policy?",
+    a: "Unused items can be returned within 30 days. Furniture must be in original condition. We collect large pieces from most metro areas — contact the studio and we will arrange it.",
+  },
+  {
+    q: "Can I order for a project or a trade account?",
+    a: "Yes. Garace works with designers and small wholesale accounts. Use the quick order list or write to touch@garacestore.com with your resale certificate and we will set volume pricing.",
+  },
+  {
+    q: "Do you offer fabric and finish samples?",
+    a: "The Textura Set is a paid sample kit that is credited back on your next furniture order. Individual swatches can also be requested from any product page.",
+  },
+  {
+    q: "How do volume prices work?",
+    a: "On eligible furniture, 5 or more of the same piece save 5%, and 10 or more save 10%. The discount appears in the cart once the quantity rule is met.",
+  },
+  {
+    q: "Where can I see pieces in person?",
+    a: "Studios are open in New York, Miami, Los Angeles, London, and Copenhagen. Visit Find a Store for hours, or book a private appointment from the contact page.",
+  },
+];
+
+export const testimonials = [
+  {
+    quote: "All products are authentic and imported from the country of origin.",
+    name: "Jenny Wilson",
+    place: "New Mexico",
+  },
+  {
+    quote: "Each piece is authentic and carefully sourced from its place of origin.",
+    name: "Julie Mathers",
+    place: "Australia",
+  },
+  {
+    quote: "Crafted with care using local materials, each piece reflects the character of its origin.",
+    name: "John Doe",
+    place: "New York",
+  },
+  {
+    quote: "The products are artful, fun, have a story just as unique as the designers who made it.",
+    name: "Jenny Wilson",
+    place: "New Mexico",
+  },
+  {
+    quote: "The best coat I have found. Great colors and materials for life style.",
+    name: "Samantha Taylor",
+    place: "Portland, Oregon",
+  },
+  {
+    quote: "Every item feels like a masterpiece, blending creativity and authenticity beautifully.",
+    name: "David Martinez",
+    place: "Austin, Texas",
+  },
+];
+========== INFO PAGE ==========
+import { useMemo, useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import {
+  collections,
+  faqs,
+  file,
+  formatMoney,
+  getProduct,
+  img,
+  posts,
+  products,
+  stores,
+} from "@/data/catalog";
+import { useStore } from "@/context/Store";
+import { Btn, Crumbs, Money, Stars } from "@/components/ui";
+import { ProductCard } from "@/components/ProductCard";
+
+export function AboutPage() {
+  return (
+    <div>
+      <div className="relative h-[420px]">
+        <img src={file("home-iwt_1-v2.jpg", 1800)} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+        <div className="absolute inset-0 bg-black/30" />
+        <div className="absolute inset-0 flex items-end">
+          <div className="mx-auto w-full max-w-[1680px] px-6 pb-10 text-white lg:px-10">
+            <p className="text-sm font-bold uppercase tracking-[0.18em]">The studio</p>
+            <h1 className="text-5xl font-bold">About Garace</h1>
+          </div>
+        </div>
+      </div>
+      <div className="mx-auto grid max-w-5xl gap-10 px-6 py-16 lg:grid-cols-2">
+        <div>
+          <h2 className="text-3xl font-bold">Where design meets function</h2>
+          <p className="mt-4 text-[#444]">
+            Garace is a furniture studio working between New York and Copenhagen. We design pieces for rooms that have to work on a Tuesday and still feel considered on Sunday — sofas with a low line, tables with a precise edge, lamps that behave like objects.
+          </p>
+          <p className="mt-3 text-[#444]">
+            The collection is small on purpose. Oak, wool, steel, and glaze. Prices are published without ceremony. Volume rules exist for designers and small trade accounts who specify the same piece more than once.
+          </p>
+        </div>
+        <img src={file("multicolumn-1-v2.jpg", 900)} alt="" className="rounded-3xl object-cover" referrerPolicy="no-referrer" />
+      </div>
+      <div className="bg-[#1d349a] py-14 text-white">
+        <div className="mx-auto grid max-w-5xl grid-cols-3 gap-6 px-6 text-center">
+          {[
+            ["2014", "Studio founded"],
+            ["5", "Cities with a showroom"],
+            ["4.8", "Review score"],
+          ].map(([n, l]) => (
+            <div key={l}>
+              <p className="text-4xl font-bold">{n}</p>
+              <p className="text-sm text-white/80">{l}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function ContactPage() {
+  const [sent, setSent] = useState(false);
+  return (
+    <div className="mx-auto grid max-w-5xl gap-10 px-6 py-12 lg:grid-cols-2">
+      <div>
+        <Crumbs items={[{ label: "Contact" }]} />
+        <h1 className="text-4xl font-bold">Contact</h1>
+        <p className="mt-3 text-[#555]">Write to the studio for a project, a trade account, or a piece you cannot find.</p>
+        <ul className="mt-6 space-y-2 text-sm">
+          <li><strong>Email</strong> touch@garacestore.com</li>
+          <li><strong>Phone</strong> +1 888-234-1234</li>
+          <li><strong>Hours</strong> Mon–Sat, 9am–6pm EST</li>
+        </ul>
+      </div>
+      {sent ? (
+        <p className="rounded-3xl bg-[#f4f691] p-8 font-bold">Message received. A person — not a queue — will reply.</p>
+      ) : (
+        <form
+          className="space-y-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            setSent(true);
+          }}
+        >
+          <input required placeholder="Name" className="h-12 w-full rounded-2xl bg-[#ededed] px-4 outline-none" />
+          <input required type="email" placeholder="Email" className="h-12 w-full rounded-2xl bg-[#ededed] px-4 outline-none" />
+          <select className="h-12 w-full rounded-2xl bg-[#ededed] px-4">
+            <option>General</option>
+            <option>Trade / wholesale</option>
+            <option>Order support</option>
+            <option>Press</option>
+          </select>
+          <textarea required placeholder="Message" className="h-36 w-full rounded-2xl bg-[#ededed] p-4 outline-none" />
+          <Btn type="submit">Send</Btn>
+        </form>
+      )}
+    </div>
+  );
+}
+
+export function FaqPage() {
+  const [open, setOpen] = useState(0);
+  return (
+    <div className="mx-auto max-w-3xl px-6 py-12">
+      <Crumbs items={[{ label: "FAQs" }]} />
+      <h1 className="text-4xl font-bold">Help Center</h1>
+      <div className="mt-8 divide-y border-y">
+        {faqs.map((f, i) => (
+          <div key={f.q}>
+            <button type="button" className="flex w-full items-center justify-between py-4 text-left font-bold" onClick={() => setOpen(open === i ? -1 : i)}>
+              {f.q}
+              <span>{open === i ? "–" : "+"}</span>
+            </button>
+            {open === i ? <p className="pb-4 text-sm text-[#555]">{f.a}</p> : null}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function StoresPage() {
+  const [q, setQ] = useState("");
+  const list = stores.filter((s) => `${s.city} ${s.name} ${s.address}`.toLowerCase().includes(q.toLowerCase()));
+  return (
+    <div className="mx-auto max-w-5xl px-6 py-12">
+      <Crumbs items={[{ label: "Find a Store" }]} />
+      <h1 className="text-4xl font-bold">Find a Store</h1>
+      <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search city" className="mt-6 h-12 w-full max-w-md rounded-full bg-[#ededed] px-5 outline-none" />
+      <div className="mt-8 grid gap-4 md:grid-cols-2">
+        {list.map((s) => (
+          <article key={s.city} className="rounded-3xl border border-[#eee] p-5">
+            <p className="text-xs font-bold uppercase tracking-wide text-[#1d349a]">{s.city}</p>
+            <h2 className="text-xl font-bold">{s.name}</h2>
+            <p className="mt-2 text-sm text-[#555]">{s.address}</p>
+            <p className="text-sm">{s.hours}</p>
+            <p className="text-sm font-semibold">{s.phone}</p>
+            <a className="mt-3 inline-block text-sm font-bold underline" href={`https://maps.google.com/?q=${encodeURIComponent(s.address)}`} target="_blank" rel="noreferrer">
+              Open map
+            </a>
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function BlogPage() {
+  return (
+    <div className="mx-auto max-w-[1680px] px-6 py-12 lg:px-10">
+      <h1 className="text-4xl font-bold">Journal</h1>
+      <div className="mt-8 grid gap-6 md:grid-cols-3">
+        {posts.map((p) => (
+          <Link key={p.slug} to={`/pages/blog/${p.slug}`} className="group">
+            <img src={file(p.image, 800)} alt="" className="aspect-[4/3] w-full rounded-3xl object-cover" referrerPolicy="no-referrer" />
+            <p className="mt-3 text-xs font-bold uppercase tracking-wide text-[#888]">{p.date}</p>
+            <h2 className="text-xl font-bold group-hover:underline">{p.title}</h2>
+            <p className="text-sm text-[#555]">{p.excerpt}</p>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function PostPage() {
+  const { slug } = useParams();
+  const post = posts.find((p) => p.slug === slug);
+  if (!post) return <div className="px-6 py-20 text-center">Article not found.</div>;
+  return (
+    <article className="mx-auto max-w-3xl px-6 py-12">
+      <Crumbs items={[{ label: "Journal", to: "/pages/blog" }, { label: post.title }]} />
+      <p className="text-sm text-[#888]">{post.date}</p>
+      <h1 className="mt-2 text-4xl font-bold">{post.title}</h1>
+      <img src={file(post.image, 1400)} alt="" className="mt-6 w-full rounded-3xl object-cover" referrerPolicy="no-referrer" />
+      <p className="mt-6 text-lg leading-relaxed text-[#333]">{post.body}</p>
+    </article>
+  );
+}
+
+export function FeaturesPage() {
+  const links = [
+    ["Vertical thumbnails", "/products/arc-chair?gallery=vertical"],
+    ["Horizontal thumbnails", "/products/arc-chair?gallery=horizontal"],
+    ["Grid 2 columns", "/products/loop-sofa-armrest?gallery=grid"],
+    ["Grid mix", "/products/swivel-table?gallery=mix"],
+    ["Color swatches", "/products/arc-chair?swatch=color"],
+    ["Image swatches", "/products/cozy-chair?swatch=image"],
+    ["Flash sale product", "/products/arc-chair"],
+    ["Coming soon", "/products/rio-ottoman"],
+    ["Out of stock", "/products/victoria-ottoman"],
+    ["On sale collection", "/collections/sale-items"],
+    ["Left banner collection", "/collections/chairs?layout=left"],
+    ["Card collection", "/collections/lighting?layout=cards"],
+    ["Quick order list", "/pages/quick-order"],
+    ["Compare", "/pages/compare"],
+    ["Gift card", "/products/hyper-gift-card"],
+  ];
+  return (
+    <div className="mx-auto max-w-5xl px-6 py-12">
+      <h1 className="text-4xl font-bold">Theme Features</h1>
+      <p className="mt-2 max-w-2xl text-[#555]">The Hyper preset is built for deep catalogs: mega menus, swatches, compare, volume pricing, and several ways to open a collection or a product.</p>
+      <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {links.map(([label, to]) => (
+          <Link key={label} to={to} className="rounded-2xl bg-[#f6f6f6] p-5 font-bold hover:bg-[#ededed]">
+            {label}
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function ComparePage() {
+  const { compare, toggleCompare, clearCompare, currency } = useStore();
+  const list = compare.map((h) => getProduct(h)).filter(Boolean);
+  if (list.length === 0) {
+    return (
+      <div className="px-6 py-24 text-center">
+        <h1 className="text-3xl font-bold">Compare</h1>
+        <p className="mt-2 text-[#666]">Select up to five pieces from any collection.</p>
+        <Btn to="/collections/chairs" className="mt-6">Browse chairs</Btn>
+      </div>
+    );
+  }
+  const rows: [string, (p: NonNullable<(typeof list)[number]>) => string][] = [
+    ["Price", (p) => formatMoney(p.variants[0].price, currency)],
+    ["Type", (p) => p.type],
+    ["Rating", (p) => String(p.rating)],
+    ["Dimensions", (p) => p.dims],
+    ["Seat", (p) => p.seat],
+    ["Weight", (p) => p.weight],
+    ["Origin", (p) => p.origin],
+    ["Stock", (p) => (p.stock ? `${p.stock} in studio` : "Waitlist")],
+  ];
+  return (
+    <div className="mx-auto max-w-[1680px] overflow-auto px-6 py-10">
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="text-3xl font-bold">Compare</h1>
+        <button type="button" className="text-sm font-bold underline" onClick={clearCompare}>Clear all</button>
+      </div>
+      <table className="w-full min-w-[720px] text-left text-sm">
+        <thead>
+          <tr>
+            <th />
+            {list.map((p) => (
+              <th key={p!.handle} className="p-3 align-top">
+                <img src={img(p!.images[0], 300)} alt="" className="mb-2 h-36 w-full rounded-2xl object-cover" referrerPolicy="no-referrer" />
+                <Link to={`/products/${p!.handle}`} className="font-bold hover:underline">{p!.title}</Link>
+                <button type="button" className="mt-1 block text-xs underline" onClick={() => toggleCompare(p!.handle)}>Remove</button>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(([label, fn]) => (
+            <tr key={label} className="border-t">
+              <th className="py-3 pr-4 font-bold">{label}</th>
+              {list.map((p) => (
+                <td key={p!.handle} className="p-3">{fn(p!)}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export function WishlistPage() {
+  const { wishlist, toggleWish } = useStore();
+  const list = wishlist.map((h) => getProduct(h)).filter(Boolean);
+  return (
+    <div className="mx-auto max-w-[1680px] px-6 py-10 lg:px-10">
+      <h1 className="text-4xl font-bold">Wishlist</h1>
+      {list.length === 0 ? (
+        <div className="py-16">
+          <p className="text-[#666]">Nothing saved yet.</p>
+          <Btn to="/collections/new" className="mt-4">See new arrivals</Btn>
+        </div>
+      ) : (
+        <div className="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {list.map((p) => (
+            <div key={p!.handle}>
+              <ProductCard product={p!} />
+              <button type="button" className="mt-2 text-xs font-bold underline" onClick={() => toggleWish(p!.handle)}>Remove</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function AccountPage() {
+  const { user, signIn, signOut } = useStore();
+  const [mode, setMode] = useState<"in" | "up">("in");
+  if (user) {
+    return (
+      <div className="mx-auto max-w-lg px-6 py-16">
+        <h1 className="text-3xl font-bold">Hello, {user.name.split(" ")[0]}</h1>
+        <p className="mt-2 text-sm text-[#666]">{user.email}</p>
+        <div className="mt-6 space-y-2 text-sm font-bold">
+          <Link to="/pages/wishlist" className="block underline">Wishlist</Link>
+          <Link to="/pages/quick-order" className="block underline">Quick order</Link>
+          <Link to="/collections/sale-items" className="block underline">Your offers</Link>
+        </div>
+        <button type="button" className="mt-6 text-sm font-bold underline" onClick={signOut}>Sign out</button>
+      </div>
+    );
+  }
+  return (
+    <div className="mx-auto max-w-md px-6 py-16">
+      <div className="mb-6 flex gap-4 font-bold">
+        <button type="button" className={mode === "in" ? "underline" : "text-[#888]"} onClick={() => setMode("in")}>Sign in</button>
+        <button type="button" className={mode === "up" ? "underline" : "text-[#888]"} onClick={() => setMode("up")}>Register</button>
+      </div>
+      <form
+        className="space-y-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const data = new FormData(e.currentTarget);
+          signIn(String(data.get("name") || "Guest"), String(data.get("email")));
+        }}
+      >
+        {mode === "up" ? <input name="name" required placeholder="Name" className="h-12 w-full rounded-2xl bg-[#ededed] px-4 outline-none" /> : <input type="hidden" name="name" value="Studio Guest" />}
+        <input name="email" type="email" required placeholder="Email" className="h-12 w-full rounded-2xl bg-[#ededed] px-4 outline-none" />
+        <input name="password" type="password" required minLength={4} placeholder="Password" className="h-12 w-full rounded-2xl bg-[#ededed] px-4 outline-none" />
+        <Btn type="submit" className="w-full">{mode === "in" ? "Sign in" : "Create account"}</Btn>
+      </form>
+    </div>
+  );
+}
+
+export function PoliciesPage() {
+  return (
+    <div className="mx-auto max-w-3xl px-6 py-12">
+      <h1 className="text-4xl font-bold">Policies</h1>
+      <h2 className="mt-8 text-xl font-bold">Shipping</h2>
+      <p className="mt-2 text-sm text-[#444]">Express shipping is free on orders over $500. Standard delivery is a flat $29. In-store pickup is free from New York, Miami, and Los Angeles.</p>
+      <h2 className="mt-6 text-xl font-bold">Returns</h2>
+      <p className="mt-2 text-sm text-[#444]">Unused goods may be returned within 30 days. Furniture must be in original condition. Contact the studio and we will arrange collection in most metro areas.</p>
+      <h2 className="mt-6 text-xl font-bold">Privacy</h2>
+      <p className="mt-2 text-sm text-[#444]">We keep your name, email, and order details to fulfill what you asked for. We do not sell them. Newsletter mail can be stopped from any message.</p>
+    </div>
+  );
+}
+
+export function QuickOrderPage() {
+  const [qty, setQty] = useState<Record<string, number>>({});
+  const { add } = useStore();
+  const rows = useMemo(() => products.filter((p) => ["Chairs", "Tables", "Sofas", "Desks", "Bar Stools"].includes(p.type)).slice(0, 18), []);
+  return (
+    <div className="mx-auto max-w-4xl px-6 py-12">
+      <h1 className="text-4xl font-bold">Quick order</h1>
+      <p className="mt-2 text-sm text-[#555]">A list for trade accounts. Set quantities and add the whole sheet to the cart. Volume pricing applies at 5 and 10.</p>
+      <div className="mt-6 overflow-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b text-left">
+              <th className="py-2">Piece</th>
+              <th>SKU</th>
+              <th>Price</th>
+              <th>Qty</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((p) => (
+              <tr key={p.handle} className="border-b">
+                <td className="py-2">
+                  <Link to={`/products/${p.handle}`} className="font-semibold hover:underline">{p.title}</Link>
+                </td>
+                <td className="text-[#666]">{p.sku}</td>
+                <td><Money amount={p.variants[0].price} /></td>
+                <td>
+                  <input
+                    type="number"
+                    min={0}
+                    value={qty[p.handle] || 0}
+                    onChange={(e) => setQty({ ...qty, [p.handle]: Number(e.target.value) })}
+                    className="h-10 w-20 rounded-xl bg-[#ededed] px-2"
+                  />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <Btn
+        className="mt-6"
+        onClick={() => {
+          rows.forEach((p) => {
+            const n = qty[p.handle] || 0;
+            if (n > 0) add(p.handle, p.variants[0].id, n);
+          });
+        }}
+      >
+        Add selected to cart
+      </Btn>
+    </div>
+  );
+}
+
+export function CollectionsIndex() {
+  return (
+    <div className="mx-auto max-w-[1680px] px-6 py-12 lg:px-10">
+      <h1 className="text-4xl font-bold">Collections</h1>
+      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {collections.slice(0, 16).map((c) => (
+          <Link key={c.handle} to={`/collections/${c.handle}`} className="group">
+            <img src={file(c.image, 600)} alt="" className="aspect-[4/3] w-full rounded-3xl object-cover" referrerPolicy="no-referrer" />
+            <p className="mt-2 font-bold group-hover:underline">{c.title}</p>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function NotFound() {
+  return (
+    <div className="px-6 py-24 text-center">
+      <h1 className="text-4xl font-bold">Page not found</h1>
+      <Btn to="/" className="mt-6">Home</Btn>
+    </div>
+  );
+}
+
+export function RatingNote() {
+  return <Stars value={5} />;
+}
+========== FOOTER ==========
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { CURRENCIES, LOGO } from "@/data/catalog";
+import { useStore } from "@/context/Store";
+import { Social } from "./ui";
+
+export function Footer() {
+  const store = useStore();
+  const [email, setEmail] = useState("");
+  const [done, setDone] = useState(false);
+  const [cur, setCur] = useState(false);
+
+  return (
+    <footer className="border-t border-[#eee] bg-white">
+      <div className="border-b border-[#eee] bg-[#f7f7f7]">
+        <div className="mx-auto grid max-w-[1680px] gap-6 px-4 py-8 sm:px-6 md:grid-cols-2 lg:grid-cols-4 lg:px-10">
+          <Info icon="chat" title="Customer Service" text="Mon–Sat, 9am–6pm EST." />
+          <Info icon="phone" title="Call Us" text="+1 888-234-1234 (toll-free)" />
+          <Info icon="mail" title="Get in Touch" text="touch@garacestore.com" />
+          <Info icon="pin" title="Address" text="382 NE 191st St #87394 Miami" />
+        </div>
+      </div>
+
+      <div className="mx-auto grid max-w-[1680px] gap-10 px-4 py-14 sm:px-6 lg:grid-cols-[1.3fr_.7fr_.7fr_.7fr] lg:px-10">
+        <div>
+          <h3 className="text-2xl font-bold">Join Our Newsletter</h3>
+          <p className="mt-2 max-w-md text-sm text-[#666]">
+            Sign up to our newsletter & receive 10% off your first order.
+          </p>
+          {done ? (
+            <p className="mt-4 font-bold text-[#0d8756]">You are in. Use code WELCOME10 at checkout.</p>
+          ) : (
+            <form
+              className="mt-5 flex max-w-md overflow-hidden rounded-full bg-[#ededed]"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!email.includes("@")) return;
+                setDone(true);
+                store.applyCode("WELCOME10");
+              }}
+            >
+              <input
+                required
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Email"
+                className="h-12 min-w-0 flex-1 bg-transparent px-5 outline-none"
+              />
+              <button className="h-12 rounded-full bg-black px-6 text-sm font-bold text-white">Sign up</button>
+            </form>
+          )}
+          <p className="mt-3 text-xs text-[#888]">
+            By subscribing you agree to the{" "}
+            <Link to="/pages/policies" className="underline">
+              Terms of Services
+            </Link>{" "}
+            and{" "}
+            <Link to="/pages/policies" className="underline">
+              Privacy Policy
+            </Link>
+            .
+          </p>
+        </div>
+        <Col
+          title="Company"
+          links={[
+            ["About us", "/pages/about"],
+            ["Contact", "/pages/contact"],
+            ["FAQs", "/pages/faqs"],
+            ["Blog", "/pages/blog"],
+            ["Find a Store", "/pages/find-a-store"],
+          ]}
+        />
+        <Col
+          title="Collection"
+          links={[
+            ["Tables", "/collections/tables"],
+            ["Bow Chairs", "/collections/bow-chairs"],
+            ["Turn Table", "/products/spin-table"],
+            ["Turn Chair", "/collections/turn-chairs"],
+            ["Cross Bar Chair", "/collections/bow-chairs"],
+          ]}
+        />
+        <Col
+          title="Shop"
+          links={[
+            ["Sofas", "/collections/sofas"],
+            ["Outdoor", "/collections/outdoor"],
+            ["Seating", "/collections/sofas-seating"],
+            ["Lighting", "/collections/lighting"],
+            ["Accessories", "/collections/accessories"],
+          ]}
+        />
+      </div>
+
+      <div className="border-t border-[#eee]">
+        <div className="mx-auto flex max-w-[1680px] flex-col gap-4 px-4 py-6 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-10">
+          <div className="flex items-center gap-4">
+            <img src={LOGO} alt="GARACE" className="h-4" />
+            <p className="text-sm text-[#666]">© {new Date().getFullYear()} Hyper Garace.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-4 text-sm">
+            <Link to="/pages/policies" className="rev">
+              Terms of Service
+            </Link>
+            <Link to="/pages/policies" className="rev">
+              Privacy Policy
+            </Link>
+            <div className="relative">
+              <button type="button" className="font-bold" onClick={() => setCur((v) => !v)}>
+                {CURRENCIES.find((c) => c.code === store.currency)?.label} ({store.currency})
+              </button>
+              {cur ? (
+                <div className="absolute bottom-8 left-0 z-20 max-h-56 w-56 overflow-auto rounded-2xl bg-white py-2 shadow-xl">
+                  {CURRENCIES.map((c) => (
+                    <button
+                      key={c.code}
+                      type="button"
+                      className="block w-full px-3 py-1.5 text-left hover:bg-[#f5f5f5]"
+                      onClick={() => {
+                        store.setCurrency(c.code);
+                        setCur(false);
+                      }}
+                    >
+                      {c.label} ({c.code})
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {["Visa", "Mastercard", "Amex", "PayPal", "Shop"].map((p) => (
+              <span key={p} className="rounded-md border border-[#e5e5e5] px-2 py-1 text-[10px] font-bold tracking-wide">
+                {p}
+              </span>
+            ))}
+            <Social />
+          </div>
+        </div>
+      </div>
+    </footer>
+  );
+}
+
+function Col({ title, links }: { title: string; links: [string, string][] }) {
+  return (
+    <div>
+      <p className="mb-3 font-bold">{title}</p>
+      <ul className="space-y-2 text-sm text-[#444]">
+        {links.map(([label, to]) => (
+          <li key={label}>
+            <Link to={to} className="rev">
+              {label}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function Info({ icon, title, text }: { icon: string; title: string; text: string }) {
+  return (
+    <div className="flex items-start gap-3">
+      <span className="mt-0.5 text-[#1d349a]">
+        {icon === "chat" ? (
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M5 6h14v9H8l-3 3V6z" /></svg>
+        ) : icon === "phone" ? (
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M7 3h3l1 5-2 1a12 12 0 006 6l1-2 5 1v3a2 2 0 01-2 2A16 16 0 015 5a2 2 0 012-2z" /></svg>
+        ) : icon === "mail" ? (
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M4 6h16v12H4zM4 7l8 6 8-6" /></svg>
+        ) : (
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M12 21s7-6 7-11a7 7 0 10-14 0c0 5 7 11 7 11z" /><circle cx="12" cy="10" r="2" /></svg>
+        )}
+      </span>
+      <div>
+        <p className="font-bold">{title}</p>
+        <p className="text-sm text-[#666]">{text}</p>
+      </div>
+    </div>
+  );
+}
+========== ENTRY FILE ==========
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import "./index.css";
+import App from "./App";
+
+createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>
+);
