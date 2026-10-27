@@ -6,6 +6,8 @@
   "scripts": {
     "test": "node --test",
     "seed:products": "node src/scripts/seedProducts.js",
+    "provision:dev-admin": "node src/scripts/provisionDevAdmin.js",
+    "provision:render-admin-once": "node src/scripts/provisionRenderAdminOnce.js",
     "dev": "nodemon src/server.js",
     "start": "node src/server.js"
   },
