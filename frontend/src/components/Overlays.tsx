@@ -92,13 +92,13 @@ function CartDrawer() {
                       </div>
                       <p className="text-xs text-[#666]">{v.title}</p>
                       <p className="text-xs text-[#666]">Qty {line.qty}{p.saleUnit && p.saleUnit !== "piece" ? ` ${p.saleUnit}` : ""}</p>
-                      {p.priceStatus === "estimated" ? <p className="text-[11px] text-[#8a5a00]">Estimated Cortex price · pre-order</p> : null}
+                      {p.priceStatus === "estimated" ? <p className="text-[11px] text-[#8a5a00]">Unapproved price estimate · checkout unavailable</p> : null}
                       {volumeRate(line.qty) > 0 ? (
                         <p className="text-xs font-bold text-[#0d8756]">Volume −{volumeRate(line.qty) * 100}%</p>
                       ) : null}
                       <div className="mt-2 flex items-center justify-between">
                         <Qty value={line.qty} onChange={(n) => s.setQty(line.variantId, n)} label={p.title} />
-                        <Money amount={linePrice(line)} />
+                        {p.priceStatus === "estimated" ? <span className="text-xs font-semibold">Quote required</span> : <Money amount={linePrice(line)} />}
                       </div>
                     </div>
                   </li>
@@ -143,10 +143,10 @@ function CartDrawer() {
                 </button>
               </p>
             ) : null}
-            <div className="flex justify-between text-sm">
+            {s.cart.some((line) => getProduct(line.handle)?.priceStatus === "estimated") ? <p className="mt-3 border-t pt-3 text-sm font-semibold">A confirmed retail quote is required before checkout.</p> : <><div className="flex justify-between text-sm">
               <span>Subtotal</span>
               <Money amount={s.subtotal} />
-            </div>
+            </div></>}
             {s.discount > 0 ? (
               <div className="flex justify-between text-sm text-[#0d8756]">
                 <span>Savings</span>
@@ -157,9 +157,9 @@ function CartDrawer() {
               <span>Total</span>
               <Money amount={s.total} />
             </div>
-            {s.cart.some((line) => getProduct(line.handle)?.inventoryPolicy === "preorder") ? <p className="mt-2 rounded-xl bg-[#f6f6f6] p-3 text-xs text-[#555]">Pre-order items are charged at the displayed estimate. Supply and delivery are confirmed after checkout; items that cannot be sourced will be cancelled and refunded.</p> : null}
+            {s.cart.some((line) => getProduct(line.handle)?.inventoryPolicy === "preorder") ? <p className="mt-2 rounded-xl bg-[#f6f6f6] p-3 text-xs text-[#555]">Supply and delivery timing are confirmed after checkout. If supply cannot be secured, Cortex will contact you to arrange cancellation and a refund; refunds are not automatic.</p> : null}
             <p className="mt-1 text-xs text-[#888]">Taxes and shipping calculated at checkout.</p>
-            <Btn className="mt-3 w-full" to="/checkout" onClick={() => s.setCartOpen(false)}>
+            <Btn className="mt-3 w-full" disabled={s.cart.some((line) => getProduct(line.handle)?.priceStatus === "estimated")} to="/checkout" onClick={() => s.setCartOpen(false)}>
               Checkout
             </Btn>
           </div>
@@ -202,8 +202,8 @@ function QuickView() {
         <div className="p-6 md:p-8">
           <p className="text-xs font-bold uppercase tracking-wide text-[#888]">{p.type}</p>
           <h3 className="mt-1 text-2xl font-bold">{p.title}</h3>
-          <div className="mt-2"><Money amount={variant.price} compare={variant.compare} /><span className="ml-1 text-sm text-[#666]">{priceUnitLabel(p)}</span></div>
-          {p.priceStatus === "estimated" ? <p className="mt-1 text-xs font-semibold text-[#8a5a00]">Estimated Cortex retail price · review pending</p> : null}
+          <div className="mt-2">{p.priceStatus === "estimated" ? <span className="font-semibold">Price on enquiry</span> : <><Money amount={variant.price} compare={variant.compare} /><span className="ml-1 text-sm text-[#666]">{priceUnitLabel(p)}</span></>}</div>
+          {p.priceStatus === "estimated" ? <p className="mt-1 text-xs font-semibold text-[#8a5a00]">Retail price is not approved; checkout is unavailable.</p> : null}
           <p className="mt-3 text-sm text-[#555]">{p.desc}</p>
           {colors ? (
             <div className="mt-4">
@@ -227,7 +227,7 @@ function QuickView() {
               </div>
             </div>
           ) : null}
-          {preorder ? <p className="mt-5 rounded-xl bg-[#f6f6f6] p-3 text-sm">Pre-order: supplier availability and delivery timing will be confirmed after checkout. If supply cannot be secured, the order will be cancelled and refunded.</p> : null}
+          {preorder ? <p className="mt-5 rounded-xl bg-[#f6f6f6] p-3 text-sm">Pre-order: price and supplier availability require confirmation. Contact Cortex before purchase. If supply cannot be secured after an approved order, Cortex will contact you to arrange cancellation and a refund; refunds are not automatic.</p> : null}
           <div className="mt-5 flex flex-wrap items-center gap-3">
             <Qty value={qty} onChange={setQty} label={p.title} />
             <Btn

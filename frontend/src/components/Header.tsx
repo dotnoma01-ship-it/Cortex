@@ -5,7 +5,6 @@ import {
   LOGO,
   categoryColumns,
   featureLinks,
-  file,
   getProduct,
   img,
   pageLinks,
@@ -21,6 +20,46 @@ const trending = ["arc-chair", "feast-chair", "bar-chair-sand", "swivel-table", 
   .map((h) => getProduct(h))
   .filter((p): p is NonNullable<typeof p> => Boolean(p));
 
+const categoryRouteByType: Record<string, string> = {
+  Accessories: "/collections/accessories",
+  Armchairs: "/collections/bend-chairs",
+  "Bar Stools": "/collections/bar-chairs",
+  Bowls: "/collections/accessories",
+  Candles: "/collections/candles",
+  Chairs: "/collections/chairs",
+  Desks: "/collections/desks",
+  Home: "/search?type=Home",
+  Lamps: "/collections/lighting",
+  "Marble Products": "/pages/marble-products",
+  Ottomans: "/collections/soft-stools",
+  Pillows: "/collections/accessories",
+  Planters: "/collections/outdoor",
+  "Rack Wall": "/collections/storage",
+  Rugs: "/collections/rugs",
+  Sofa: "/collections/sofas",
+  Sofas: "/collections/sofas",
+  Tables: "/collections/tables",
+  Towels: "/collections/accessories",
+  Vases: "/collections/accessories",
+  "Floating Wall": "/collections/storage",
+};
+
+const categoryProductByType: Record<string, string> = {
+  "Bar Stools": "bar-chair-sand",
+};
+
+const productCategories = [...new Set(products.map((product) => product.type))]
+  .map((type) => {
+    const product = getProduct(categoryProductByType[type]) ?? products.find((item) => item.type === type && item.images[0]);
+    if (!product) return null;
+    return {
+      type,
+      product,
+      to: categoryRouteByType[type] ?? `/search?type=${encodeURIComponent(type)}`,
+    };
+  })
+  .filter((category): category is NonNullable<typeof category> => Boolean(category));
+
 export function Header() {
   const store = useStore();
   const nav = useNavigate();
@@ -29,6 +68,7 @@ export function Header() {
   const [focus, setFocus] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const [room, setRoom] = useState(rooms[0].label);
+  const [hoveredCategory, setHoveredCategory] = useState<string | null>(null);
   const [curOpen, setCurOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
@@ -213,16 +253,17 @@ export function Header() {
 
       <nav
         className="relative hidden border-t border-[#f0f0f0] lg:block"
-        onMouseLeave={() => setOpen(null)}
+        onMouseLeave={() => { setOpen(null); setHoveredCategory(null); }}
+        onKeyDown={(event) => { if (event.key === "Escape") setOpen(null); }}
       >
         <ul className="mx-auto flex h-[52px] max-w-[1680px] items-center gap-8 px-10 text-[15px] font-bold">
           <li onMouseEnter={() => setOpen("cats")}>
-            <button type="button" className="inline-flex items-center gap-1">
+            <button type="button" aria-expanded={open === "cats"} aria-controls="category-mega-menu" onClick={() => setOpen("cats")} className="inline-flex items-center gap-1">
               Shop By Categories <Caret />
             </button>
           </li>
           <li onMouseEnter={() => setOpen("rooms")}>
-            <button type="button" className="inline-flex items-center gap-1">
+            <button type="button" aria-expanded={open === "rooms"} onClick={() => setOpen("rooms")} className="inline-flex items-center gap-1">
               Shop By Room <Caret />
             </button>
           </li>
@@ -237,7 +278,7 @@ export function Header() {
             </Link>
           </li>
           <li onMouseEnter={() => setOpen("pages")}>
-            <button type="button" className="inline-flex items-center gap-1">
+            <button type="button" aria-expanded={open === "pages"} onClick={() => setOpen("pages")} className="inline-flex items-center gap-1">
               Pages <Caret />
             </button>
           </li>
@@ -256,33 +297,39 @@ export function Header() {
           </li>
         </ul>
 
-        {open ? (
-          <div className="absolute left-0 right-0 top-full border-t border-[#eee] bg-white shadow-[0_24px_50px_rgba(0,0,0,.08)]">
-            <div className="mx-auto grid max-w-[1680px] gap-8 px-10 py-8">
+        <div id="category-mega-menu" aria-hidden={!open} className={cn("absolute left-0 right-0 top-full z-50 border-t border-[#eee] bg-white shadow-[0_24px_50px_rgba(0,0,0,.08)] transition-[opacity,transform,visibility] duration-200 ease-out motion-reduce:transition-none", open ? "visible translate-y-0 opacity-100" : "invisible -translate-y-2 opacity-0 pointer-events-none")}>
+            <div className="mx-auto max-h-[calc(100dvh-150px)] max-w-[1680px] overflow-y-auto px-4 py-5 sm:px-6 lg:px-10 lg:py-7">
               {open === "cats" ? (
-                <div className="grid grid-cols-5 gap-8">
-                  {categoryColumns.map((col) => (
-                    <div key={col.title}>
-                      <p className="mb-3 font-bold">{col.title}</p>
-                      <ul className="space-y-2 text-sm text-[#444]">
-                        {col.links.map((l) => (
-                          <li key={l.label}>
-                            <Link to={l.to} className="rev" onClick={() => setOpen(null)}>
-                              {l.label}
-                            </Link>
-                          </li>
-                        ))}
-                      </ul>
+                <div>
+                  <div className="mb-4 flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-lg font-bold">Shop by category</p>
+                      <p className="text-xs text-[#666]">{productCategories.length} product categories</p>
                     </div>
-                  ))}
-                  <Link to="/collections/accessories" onClick={() => setOpen(null)} className="relative overflow-hidden rounded-2xl bg-[#f4f1ea]">
-                    <img src={file("collection-slider-10.jpg", 700)} alt="" className="h-56 w-full object-cover" referrerPolicy="no-referrer" />
-                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-4 text-white">
-                      <p className="text-sm">Home & Decor</p>
-                      <p className="text-lg font-bold">Decoration From $10</p>
-                      <span className="mt-2 inline-flex h-9 items-center rounded-full bg-white px-4 text-xs font-bold text-black">Shop Now</span>
-                    </div>
-                  </Link>
+                    <Link to="/collections/all" onClick={() => setOpen(null)} className="text-sm font-bold underline">View all products</Link>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 xl:grid-cols-6">
+                    {productCategories.map((category) => (
+                      <Link key={category.type} to={category.to} onMouseEnter={() => setHoveredCategory(category.type)} onFocus={() => setHoveredCategory(category.type)} onClick={() => setOpen(null)} className={cn("category-menu-card group overflow-hidden rounded-xl border bg-white transition duration-200 ease-out hover:-translate-y-0.5 hover:border-[#1d349a] hover:shadow-[0_8px_24px_rgba(29,52,154,.12)] motion-reduce:transition-none motion-reduce:hover:translate-y-0", hoveredCategory === category.type ? "border-[#1d349a] shadow-[0_8px_24px_rgba(29,52,154,.12)]" : "border-[#eee]")}>
+                        <div className="aspect-[16/10] overflow-hidden bg-[#f3f3f3]">
+                          <img src={img(category.product.images[0], 420)} alt={category.product.title} className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.04] motion-reduce:transition-none motion-reduce:group-hover:scale-100" referrerPolicy="no-referrer" />
+                        </div>
+                        <p className="truncate px-2.5 py-2 text-xs font-bold group-hover:text-[#1d349a] sm:text-sm">{category.type}</p>
+                      </Link>
+                    ))}
+                  </div>
+                  <div className="mt-6 grid gap-5 border-t border-[#eee] pt-5 sm:grid-cols-2 lg:grid-cols-4">
+                    {categoryColumns.map((col) => (
+                      <div key={col.title}>
+                        <p className="mb-2 text-xs font-bold uppercase tracking-wide text-[#777]">{col.title}</p>
+                        <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#444]">
+                          {col.links.map((link) => (
+                            <li key={`${link.label}-${link.to}`}><Link to={link.to} className="rev" onClick={() => setOpen(null)}>{link.label}</Link></li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ) : null}
 
@@ -381,7 +428,6 @@ export function Header() {
               ) : null}
             </div>
           </div>
-        ) : null}
       </nav>
     </header>
   );
@@ -424,7 +470,7 @@ function MegaProducts({
               <Link key={h} to={`/products/${p.handle}`} onClick={onNav} className="group">
                 <img src={img(p.images[0], 300)} alt={p.title} className="aspect-square w-full rounded-xl object-cover bg-[#f3f3f3]" referrerPolicy="no-referrer" />
                 <p className="mt-2 text-sm font-semibold leading-tight group-hover:underline">{p.title}</p>
-                <p className="text-sm font-bold">${p.variants[0].price.toFixed(2)}</p>
+                <p className="text-sm font-bold">{p.priceStatus === "estimated" ? "Price on enquiry" : `$${p.variants[0].price.toFixed(2)}`}</p>
               </Link>
             );
           })}
@@ -466,13 +512,34 @@ export function MobileMenu() {
                 {title as string}
                 <Caret className={section === title ? "rotate-180" : ""} />
               </button>
-              {section === title ? (
+              {section === title ? title === "Shop By Categories" ? (
+                <div className="pb-4">
+                  <div className="grid grid-cols-2 gap-2">
+                    {productCategories.map((category) => (
+                      <Link key={category.type} to={category.to} onClick={() => store.setMenuOpen(false)} className="category-menu-card group overflow-hidden rounded-xl border border-[#eee] bg-white">
+                        <div className="aspect-[16/10] overflow-hidden bg-[#f3f3f3]">
+                          <img src={img(category.product.images[0], 360)} alt={category.product.title} className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.04] motion-reduce:transition-none motion-reduce:group-hover:scale-100" referrerPolicy="no-referrer" />
+                        </div>
+                        <p className="truncate px-2 py-1.5 text-xs font-bold">{category.type}</p>
+                      </Link>
+                    ))}
+                  </div>
+                  <div className="mt-4 space-y-3 border-t border-[#eee] pt-3">
+                    {categoryColumns.map((column) => (
+                      <div key={column.title}>
+                        <p className="mb-1 text-xs font-bold uppercase tracking-wide text-[#777]">{column.title}</p>
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-[#444]">
+                          {column.links.map((link) => <Link key={`${link.label}-${link.to}`} to={link.to} onClick={() => store.setMenuOpen(false)}>{link.label}</Link>)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
                 <ul className="space-y-2 pb-3 text-sm text-[#444]">
                   {(links as { label: string; to: string }[]).map((l) => (
                     <li key={l.label + l.to}>
-                      <Link to={l.to} onClick={() => store.setMenuOpen(false)}>
-                        {l.label}
-                      </Link>
+                      <Link to={l.to} onClick={() => store.setMenuOpen(false)}>{l.label}</Link>
                     </li>
                   ))}
                 </ul>

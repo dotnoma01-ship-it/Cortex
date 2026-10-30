@@ -133,9 +133,9 @@ export function ProductCard({
           {product.title}
         </Link>
         <div className="mt-1">
-          <><Money amount={range.min} compare={!range.from ? range.compare : null} /><span className="ml-1 text-[12px] text-[#666]">{priceUnitLabel(product)}</span>{range.from ? <span className="ml-1 text-[13px] text-[#666]">from</span> : null}</>
+          {product.priceStatus === "estimated" ? <span className="text-sm font-semibold">Price on enquiry</span> : <><Money amount={range.min} compare={!range.from ? range.compare : null} /><span className="ml-1 text-[12px] text-[#666]">{priceUnitLabel(product)}</span>{range.from ? <span className="ml-1 text-[13px] text-[#666]">from</span> : null}</>}
         </div>
-        {product.priceStatus === "estimated" ? <p className="mt-0.5 text-[11px] font-semibold text-[#8a5a00]">Estimated price · pre-order</p> : null}
+        {product.priceStatus === "estimated" ? <p className="mt-0.5 text-[11px] font-semibold text-[#8a5a00]">Retail price not approved · checkout unavailable</p> : null}
         {colors && colors.values.length > 0 ? (
           <div className="mt-2.5 flex flex-wrap gap-1.5">
             {colors.values.slice(0, 5).map((c) => {

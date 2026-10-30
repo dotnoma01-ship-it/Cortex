@@ -142,6 +142,13 @@ router.post("/", protect, async (req, res, next) => {
         });
       }
 
+      if (product.priceStatus === "estimated") {
+        return res.status(409).json({
+          success: false,
+          message: `${product.title} has an unapproved price estimate. Contact Cortex for a confirmed retail quote before checkout.`,
+        });
+      }
+
       if (product.inventoryPolicy !== "preorder" && product.stock < qty) {
         return res.status(409).json({
           success: false,

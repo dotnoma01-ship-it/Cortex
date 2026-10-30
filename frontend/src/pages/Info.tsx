@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
+  COLORS,
   collections,
   faqs,
   file,
@@ -156,31 +157,93 @@ export function PostPage() {
 }
 
 export function FeaturesPage() {
-  const links = [
-    ["Vertical thumbnails", "/products/arc-chair?gallery=vertical"],
-    ["Horizontal thumbnails", "/products/arc-chair?gallery=horizontal"],
-    ["Grid 2 columns", "/products/loop-sofa-armrest?gallery=grid"],
-    ["Grid mix", "/products/swivel-table?gallery=mix"],
-    ["Color swatches", "/products/arc-chair?swatch=color"],
-    ["Image swatches", "/products/cozy-chair?swatch=image"],
-    ["Flash sale product", "/products/arc-chair"],
-    ["Coming soon", "/products/rio-ottoman"],
-    ["Out of stock", "/products/victoria-ottoman"],
-    ["On sale collection", "/collections/sale-items"],
-    ["Left banner collection", "/collections/chairs?layout=left"],
-    ["Card collection", "/collections/lighting?layout=cards"],
-    ["Quick order list", "/pages/quick-order"],
-    ["Compare", "/pages/compare"],
-    ["Gift card", "/products/hyper-gift-card"],
+  const features: { label: string; to: string; kind: string; handles: string[]; asset?: string }[] = [
+    { label: "Vertical thumbnails", to: "/products/arc-chair?gallery=vertical", kind: "vertical", handles: ["arc-chair"] },
+    { label: "Horizontal thumbnails", to: "/products/arc-chair?gallery=horizontal", kind: "horizontal", handles: ["loop-sofa-armrest"] },
+    { label: "Grid 2 columns", to: "/products/loop-sofa-armrest?gallery=grid", kind: "grid", handles: ["loop-sofa-armrest"] },
+    { label: "Grid mix", to: "/products/swivel-table?gallery=mix", kind: "mix", handles: ["swivel-table", "highline-table", "nook-table"] },
+    { label: "Color swatches", to: "/products/arc-chair?swatch=color", kind: "colors", handles: ["arc-chair"] },
+    { label: "Image swatches", to: "/products/cozy-chair?swatch=image", kind: "image-swatches", handles: ["cozy-chair"] },
+    { label: "Flash sale product", to: "/products/arc-chair", kind: "sale-product", handles: ["arc-chair"] },
+    { label: "Coming soon", to: "/products/rio-ottoman", kind: "coming", handles: ["rio-ottoman"] },
+    { label: "Out of stock", to: "/products/victoria-ottoman", kind: "sold", handles: ["victoria-ottoman"] },
+    { label: "On sale collection", to: "/collections/sale-items", kind: "sale-collection", handles: ["loop-sofa-armrest"], asset: "collection-sales.webp" },
+    { label: "Left banner collection", to: "/collections/chairs?layout=left", kind: "left-banner", handles: ["arc-chair"], asset: "collection-slider-6.jpg" },
+    { label: "Card collection", to: "/collections/lighting?layout=cards", kind: "cards", handles: ["ray-table-lamp-1", "halo-lamp", "swing-wall-lamp"] },
+    { label: "Quick order list", to: "/pages/quick-order", kind: "quick-order", handles: ["arc-chair", "highline-table", "ray-table-lamp-1"] },
+    { label: "Compare", to: "/pages/compare", kind: "compare", handles: ["arc-chair", "swivel-table"] },
+    { label: "Gift card", to: "/products/hyper-gift-card", kind: "gift-card", handles: ["hyper-gift-card"] },
   ];
+
+  const imageFor = (handle: string, index = 0, width = 520) => {
+    const product = getProduct(handle);
+    const source = product?.images[index] || product?.images[0];
+    return source ? img(source, width) : "";
+  };
+
+  const preview = (feature: (typeof features)[number]) => {
+    const product = getProduct(feature.handles[0])!;
+    const productImages = product.images;
+    const stage = "relative aspect-[4/3] overflow-hidden bg-[#f1f1ef]";
+    const productPhoto = (handle: string, index = 0, className = "") => (
+      <img src={imageFor(handle, index)} alt="" className={`object-cover ${className}`} referrerPolicy="no-referrer" />
+    );
+
+    if (feature.kind === "vertical") {
+      return <div className={`${stage} flex gap-1.5 p-2`}><div className="min-w-0 flex-1 overflow-hidden rounded-lg">{productPhoto(product.handle, 0, "h-full w-full")}</div><div className="flex w-[19%] flex-col gap-1.5">{productImages.slice(1, 4).map((_, index) => <div key={index} className="min-h-0 flex-1 overflow-hidden rounded-md">{productPhoto(product.handle, index + 1, "h-full w-full")}</div>)}</div></div>;
+    }
+    if (feature.kind === "horizontal") {
+      return <div className={`${stage} flex flex-col gap-1.5 p-2`}><div className="min-h-0 flex-1 overflow-hidden rounded-lg">{productPhoto(product.handle, 0, "h-full w-full")}</div><div className="flex h-[22%] gap-1.5">{productImages.slice(1, 4).map((_, index) => <div key={index} className="min-w-0 flex-1 overflow-hidden rounded-md">{productPhoto(product.handle, index + 1, "h-full w-full")}</div>)}</div></div>;
+    }
+    if (feature.kind === "grid") {
+      return <div className={`${stage} grid grid-cols-2 gap-1.5 p-2`}>{productImages.slice(0, 4).map((_, index) => <div key={index} className="min-h-0 overflow-hidden rounded-md">{productPhoto(product.handle, index, "h-full w-full")}</div>)}</div>;
+    }
+    if (feature.kind === "mix") {
+      return <div className={`${stage} grid grid-cols-[1.35fr_1fr] gap-1.5 p-2`}><div className="overflow-hidden rounded-lg">{productPhoto(feature.handles[0], 0, "h-full w-full")}</div><div className="grid min-h-0 grid-rows-2 gap-1.5">{feature.handles.slice(1, 3).map((handle) => <div key={handle} className="overflow-hidden rounded-md">{productPhoto(handle, 0, "h-full w-full")}</div>)}</div></div>;
+    }
+    if (feature.kind === "colors") {
+      const colors = product.options.find((option) => /color|colour/i.test(option.name))?.values ?? [];
+      return <div className={stage}>{productPhoto(product.handle, 0, "absolute inset-0 h-full w-full") }<div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-white/95 px-3 py-2"><span className="text-[10px] font-bold text-[#555]">COLOR</span><div className="flex gap-1.5">{colors.slice(0, 5).map((color) => <span key={color} title={color} className="h-4 w-4 rounded-full border border-black/15" style={{ backgroundColor: COLORS[color] ?? "#bbb" }} />)}</div></div></div>;
+    }
+    if (feature.kind === "image-swatches") {
+      return <div className={`${stage} flex flex-col gap-1.5 p-2`}><div className="min-h-0 flex-1 overflow-hidden rounded-lg">{productPhoto(product.handle, 0, "h-full w-full")}</div><div className="flex h-[22%] gap-1.5">{productImages.map((_, index) => <div key={index} className="min-w-0 flex-1 overflow-hidden rounded-md border border-white">{productPhoto(product.handle, index, "h-full w-full")}</div>)}</div></div>;
+    }
+    if (feature.kind === "sale-product") {
+      return <div className={stage}>{productPhoto(product.handle, 0, "absolute inset-0 h-full w-full") }<span className="absolute left-3 top-3 rounded-md bg-[#c4301c] px-2.5 py-1 text-[10px] font-bold text-white">SALE</span><div className="absolute inset-x-3 bottom-3 flex items-center justify-between rounded-lg bg-white/95 px-3 py-2"><span className="truncate text-xs font-bold">{product.title}</span><span className="ml-2 shrink-0 text-[10px] font-bold text-[#c4301c]">-{Math.round((1 - product.variants[0].price / (product.variants[0].compare ?? product.variants[0].price)) * 100)}%</span></div></div>;
+    }
+    if (feature.kind === "coming" || feature.kind === "sold") {
+      return <div className={stage}>{productPhoto(product.handle, 0, `absolute inset-0 h-full w-full ${feature.kind === "sold" ? "grayscale" : ""}`)}<div className="absolute inset-0 grid place-items-center bg-black/20"><span className="rounded-md bg-white/95 px-3 py-1.5 text-xs font-bold">{feature.kind === "coming" ? "COMING SOON" : "SOLD OUT"}</span></div></div>;
+    }
+    if (feature.kind === "sale-collection") {
+      return <div className={stage}><img src={file(feature.asset!, 640)} alt="" className="absolute inset-0 h-full w-full object-cover" referrerPolicy="no-referrer" /><div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-3 text-white"><span className="text-[10px] font-bold uppercase">Cortex collection</span><p className="text-lg font-bold">Sale Items</p></div></div>;
+    }
+    if (feature.kind === "left-banner") {
+      return <div className={`${stage} grid grid-cols-[0.8fr_1.2fr]`}><div className="flex flex-col justify-center bg-[#f4f1ea] p-3"><span className="text-[9px] font-bold uppercase text-[#1d349a]">Collection</span><span className="mt-1 text-sm font-bold leading-tight">Chairs</span><span className="mt-2 text-[9px] text-[#555]">Discover the range</span></div><img src={file(feature.asset!, 640)} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" /></div>;
+    }
+    if (feature.kind === "cards") {
+      return <div className={`${stage} grid grid-cols-3 gap-1.5 p-2`}>{feature.handles.map((handle) => <div key={handle} className="overflow-hidden rounded-lg bg-white shadow-sm">{productPhoto(handle, 0, "h-[78%] w-full") }<span className="block truncate px-1.5 py-1 text-[9px] font-bold">{getProduct(handle)?.title}</span></div>)}</div>;
+    }
+    if (feature.kind === "quick-order") {
+      return <div className={`${stage} flex flex-col justify-center gap-1.5 bg-[#f7f7f7] p-2.5`}>{feature.handles.map((handle) => {const item = getProduct(handle)!; return <div key={handle} className="flex min-w-0 items-center gap-2 rounded-md border border-[#eee] bg-white px-2 py-1"><span className="h-9 w-9 shrink-0 overflow-hidden rounded">{productPhoto(handle, 0, "h-full w-full")}</span><span className="min-w-0 flex-1"><span className="block truncate text-[9px] font-bold">{item.title}</span><span className="block text-[8px] text-[#777]">{item.sku}</span></span><span className="text-[9px] font-bold">QTY 1</span></div>})}</div>;
+    }
+    if (feature.kind === "compare") {
+      return <div className={`${stage} grid grid-cols-2 gap-2 p-2.5`}>{feature.handles.map((handle) => {const item = getProduct(handle)!; return <div key={handle} className="min-w-0 overflow-hidden rounded-lg bg-white"><div className="h-[74%] overflow-hidden">{productPhoto(handle, 0, "h-full w-full")}</div><p className="truncate px-2 pt-1 text-[9px] font-bold">{item.title}</p><p className="px-2 text-[9px] text-[#555]">{item.dims}</p></div>})}<span className="absolute left-1/2 top-1/2 grid h-7 w-7 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-[#1d349a] text-[9px] font-bold text-white">VS</span></div>;
+    }
+    if (feature.kind === "gift-card") {
+      return <div className={`${stage} flex items-center justify-center bg-[#f4f1ea] p-3`}><div className="relative h-full w-full overflow-hidden rounded-lg shadow-md">{productPhoto(product.handle, 0, "h-full w-full") }<div className="absolute inset-x-0 bottom-0 flex justify-center gap-1 bg-black/65 p-1.5">{product.variants.map((variant) => <span key={variant.id} className="rounded bg-white/95 px-1.5 py-0.5 text-[8px] font-bold">{variant.option1}</span>)}</div></div></div>;
+    }
+    return <div className={stage}>{productPhoto(product.handle, 0, "h-full w-full")}</div>;
+  };
+
   return (
-    <div className="mx-auto max-w-5xl px-6 py-12">
+    <div className="mx-auto max-w-[1680px] px-4 py-10 sm:px-6 lg:px-10">
       <h1 className="text-4xl font-bold">Theme Features</h1>
       <p className="mt-2 max-w-2xl text-[#555]">The Hyper preset is built for deep catalogs: mega menus, swatches, compare, volume pricing, and several ways to open a collection or a product.</p>
-      <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {links.map(([label, to]) => (
-          <Link key={label} to={to} className="rounded-2xl bg-[#f6f6f6] p-5 font-bold hover:bg-[#ededed]">
-            {label}
+      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {features.map((feature) => (
+          <Link key={feature.label} to={feature.to} className="theme-feature-card group overflow-hidden rounded-xl border border-[#e9e9e9] bg-white transition duration-200 ease-out hover:-translate-y-1 hover:border-[#1d349a]/35 hover:shadow-[0_12px_30px_rgba(17,17,17,.10)] motion-reduce:transition-none motion-reduce:hover:translate-y-0">
+            {preview(feature)}
+            <h2 className="px-3.5 py-3 text-sm font-bold leading-snug group-hover:text-[#1d349a] sm:text-base">{feature.label}</h2>
           </Link>
         ))}
       </div>
@@ -201,7 +264,7 @@ export function ComparePage() {
     );
   }
   const rows: [string, (p: NonNullable<(typeof list)[number]>) => string][] = [
-    ["Price", (p) => `${formatMoney(p.variants[0].price, currency)}${priceUnitLabel(p)}${p.priceStatus === "estimated" ? " (estimate)" : ""}`],
+    ["Price", (p) => p.priceStatus === "estimated" ? "Price on enquiry" : `${formatMoney(p.variants[0].price, currency)}${priceUnitLabel(p)}`],
     ["Type", (p) => p.type],
     ["Rating", (p) => String(p.rating)],
     ["Dimensions", (p) => p.dims],
@@ -359,7 +422,7 @@ export function QuickOrderPage() {
                   <Link to={`/products/${p.handle}`} className="font-semibold hover:underline">{p.title}</Link>
                 </td>
                 <td className="text-[#666]">{p.sku}</td>
-                <td><Money amount={p.variants[0].price} /><span className="ml-1 text-xs">{priceUnitLabel(p)}</span>{p.priceStatus === "estimated" ? <span className="ml-1 text-xs text-[#8a5a00]">Est.</span> : null}</td>
+                <td>{p.priceStatus === "estimated" ? <span className="text-xs font-semibold">Price on enquiry</span> : <><Money amount={p.variants[0].price} /><span className="ml-1 text-xs">{priceUnitLabel(p)}</span></>}</td>
                 <td>
                   <input
                     type="number" min={0} value={qty[p.handle] || 0}

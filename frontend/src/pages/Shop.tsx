@@ -86,7 +86,7 @@ export function CollectionPage() {
       )}
     >
       {layout !== "bg" && layout !== "cards" ? (
-        <img src={file(col.image, 1800)} alt="" className="h-56 w-full object-cover sm:h-72" referrerPolicy="no-referrer" />
+        <img src={col.image.startsWith("http") ? col.image : file(col.image, 1800)} alt="" className="h-56 w-full object-cover sm:h-72" referrerPolicy="no-referrer" />
       ) : (
         <div className="h-48" />
       )}
@@ -229,6 +229,16 @@ export function MarbleProductsPage() {
         <h1 className="mt-2 text-3xl font-bold sm:text-4xl">Marble Products</h1>
         <p className="mt-2 max-w-2xl text-sm text-[#666]">Review marble-effect panels listed by Cortex. Price and current availability are confirmed on enquiry.</p>
       </header>
+      <div className="mb-8 grid grid-cols-3 gap-3">
+        {marbleProducts
+          .filter((product) => product.images[0] && !product.images[0].includes("marble-product-placeholder"))
+          .slice(0, 3)
+          .map((product) => (
+            <div key={product.handle} className="aspect-[4/3] overflow-hidden rounded-2xl bg-[#f3f3f3]">
+              <img src={img(product.images[0], 800)} alt={product.title} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+            </div>
+          ))}
+      </div>
       {error ? <p className="mb-4 text-sm text-[#666]">{error} Showing products currently available in this browser.</p> : null}
       {marbleProducts.length ? (
         <div className="grid grid-cols-2 gap-5 xl:grid-cols-4">
@@ -344,9 +354,9 @@ export function ProductPage() {
             <span className="text-sm text-[#666]">{product.rating} · {product.reviews} reviews</span>
           </div> : null}
           <div className="mt-4 text-2xl">
-            <><Money amount={variant.price} compare={variant.compare} /><span className="ml-2 text-sm text-[#666]">{priceUnitLabel(product)}</span></>
+            {product.priceStatus === "estimated" ? <span className="text-lg font-semibold">Price on enquiry</span> : <><Money amount={variant.price} compare={variant.compare} /><span className="ml-2 text-sm text-[#666]">{priceUnitLabel(product)}</span></>}
           </div>
-          {product.priceStatus === "estimated" ? <p className="mt-1 text-xs font-semibold text-[#8a5a00]">Estimated Cortex retail price · review pending</p> : null}
+          {product.priceStatus === "estimated" ? <p className="mt-1 text-xs font-semibold text-[#8a5a00]">Retail price is not approved; checkout is unavailable.</p> : null}
           {!preorder ? <div className="mt-4 flex flex-wrap gap-4 text-sm font-semibold">
             {["Modern", "Eco-certified", "Warranty"].map((t) => (
               <span key={t} className="inline-flex items-center gap-2">
@@ -358,7 +368,7 @@ export function ProductPage() {
           {!preorder && product.stock > 0 && product.stock <= 5 && !coming ? (
             <p className="mt-4 text-sm font-bold text-[#c4301c]">Hurry up, only {product.stock} items left in stock.</p>
           ) : null}
-          <p className="mt-3 text-sm text-[#444]">{product.desc}</p>
+          <p className="mt-3 text-sm text-[#444]">{preorder && product.priceStatus === "estimated" ? "Pre-order candidate. Contact Cortex to confirm the retail price, supplier availability, configuration, and delivery before purchase." : product.desc}</p>
           {!preorder ? <p className="mt-3 rounded-2xl bg-[#f4f691] px-4 py-3 text-sm font-semibold">Limited offer: $20 off orders past $1,000 — applied automatically at checkout.</p> : null}
 
           {colors ? (
@@ -414,8 +424,8 @@ export function ProductPage() {
 
           {preorder ? (
             <div className="mt-5 rounded-2xl bg-[#f6f6f6] p-4 text-sm text-[#444]">
-              <p className="font-bold">Pre-order · supplier availability not yet confirmed</p>
-              <p className="mt-1">Your payment uses this estimated Cortex price. We will confirm supply and delivery timing after checkout. If we cannot secure the selected configuration, we will cancel and refund the order.</p>
+              <p className="font-bold">Pre-order · price and availability require confirmation</p>
+              <p className="mt-1">Checkout is unavailable until Cortex approves and publishes a retail price. Contact us to confirm the price, supplier availability, selected configuration, and delivery timing before purchase. If supply cannot be secured after an approved order, Cortex will contact you to arrange cancellation and a refund; refunds are not automatic.</p>
             </div>
           ) : coming || sold ? (
             <form
@@ -592,7 +602,7 @@ export function ProductPage() {
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-4">
-              <Money amount={variant.price} compare={variant.compare} className="hidden sm:inline-flex" />
+              {product.priceStatus === "estimated" ? <span className="hidden text-sm font-semibold sm:inline">Price on enquiry</span> : <Money amount={variant.price} compare={variant.compare} className="hidden sm:inline-flex" />}
               <Btn className="h-10 px-5 text-sm" onClick={() => store.add(product.handle, variant.id, qty)}>
                 Add to cart
               </Btn>
@@ -869,7 +879,8 @@ export function CheckoutPage() {
         }}
       >
         <h1 className="text-3xl font-bold">Checkout</h1>
-        {s.cart.some((line) => getProduct(line.handle)?.inventoryPolicy === "preorder") ? <p className="rounded-2xl bg-[#f6f6f6] p-4 text-sm text-[#444]">This cart contains pre-order items priced using Cortex estimates. Supplier availability and delivery timing will be confirmed after payment. If we cannot secure an item, we will cancel it and refund its payment.</p> : null}
+        {s.cart.some((line) => getProduct(line.handle)?.inventoryPolicy === "preorder") ? <p className="rounded-2xl bg-[#f6f6f6] p-4 text-sm text-[#444]">This cart contains pre-order items. Supply and delivery timing are confirmed after checkout. If supply cannot be secured, Cortex will contact you to arrange cancellation and a refund; refunds are not automatic.</p> : null}
+        {s.cart.some((line) => getProduct(line.handle)?.priceStatus === "estimated") ? <p className="rounded-2xl border border-[#d9a441] bg-[#fff9e9] p-4 text-sm text-[#5b430e]" role="alert">Checkout is unavailable because this cart contains an unapproved price estimate. Contact Cortex for a confirmed retail quote before placing an order.</p> : null}
 
         <Field name="email" label="Email" type="email" />
 
@@ -936,11 +947,13 @@ export function CheckoutPage() {
         <Btn
           type="submit"
           className="w-full"
-          disabled={s.cart.length === 0 || submitting || verifying}
+          disabled={s.cart.length === 0 || s.cart.some((line) => getProduct(line.handle)?.priceStatus === "estimated") || submitting || verifying}
         >
           {s.cart.length === 0
             ? "Cart is empty"
-            : submitting
+            : s.cart.some((line) => getProduct(line.handle)?.priceStatus === "estimated")
+              ? "Awaiting confirmed price"
+              : submitting
               ? "Connecting to Paystack..."
               : `Continue to payment $${due.toFixed(2)}`}
         </Btn>
@@ -968,21 +981,21 @@ export function CheckoutPage() {
                 <p className="font-bold">{product.title}</p>
                 <p className="text-xs text-[#666]">{product.variants.find((variant) => variant.id === line.variantId)?.title}</p>
                 <p className="text-[#666]">Qty {line.qty}{product.saleUnit && product.saleUnit !== "piece" ? ` ${product.saleUnit}` : ""}</p>
-                {product.priceStatus === "estimated" ? <p className="text-xs text-[#8a5a00]">Estimated Cortex price</p> : null}
+                {product.priceStatus === "estimated" ? <p className="text-xs text-[#8a5a00]">Price on enquiry</p> : null}
               </div>
 
-              <Money
+              {product.priceStatus === "estimated" ? <span className="text-xs font-semibold">Quote required</span> : <Money
                 amount={
                   (product.variants.find(
                     (variant) => variant.id === line.variantId,
                   )?.price ?? 0) * line.qty
                 }
-              />
+              />}
             </div>
           );
         })}
 
-        <div className="mt-4 space-y-1 border-t pt-3 text-sm">
+        {s.cart.some((line) => getProduct(line.handle)?.priceStatus === "estimated") ? <p className="mt-4 border-t pt-3 text-sm font-semibold">A confirmed retail quote is required before checkout.</p> : <div className="mt-4 space-y-1 border-t pt-3 text-sm">
           <Row k="Subtotal" v={<Money amount={s.subtotal} />} />
 
           {s.discount > 0 ? (
@@ -1005,7 +1018,7 @@ export function CheckoutPage() {
             <span>Total</span>
             <span>${due.toFixed(2)}</span>
           </div>
-        </div>
+        </div>}
       </aside>
     </div>
   );

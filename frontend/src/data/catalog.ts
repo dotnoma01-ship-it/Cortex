@@ -43,6 +43,7 @@ export function getProduct(handle?: string) {
 
 export function img(src?: string | null, w = 900) {
   if (!src) return "";
+  if (src.startsWith("https://s.alicdn.com/")) return src;
   return `${src.split("?")[0]}?width=${w}`;
 }
 
@@ -129,7 +130,7 @@ export function badges(p: Product): Badge[] {
   else if (p.tags.includes("Coming Soon")) out.push({ label: "Coming Soon", bg: "#7A34D6" });
   else if (p.stock === 0) out.push({ label: "Sold Out", bg: "#ADADAD" });
   else if (isSale(p)) out.push({ label: "Sale", bg: "#C4301C" });
-  if (p.priceStatus === "estimated") out.push({ label: "Estimated price", bg: "#555" });
+  if (p.priceStatus === "estimated") out.push({ label: "Price on enquiry", bg: "#555" });
   if (p.tags.includes("New")) out.push({ label: "New", bg: "#0d8756" });
   if (p.stock > 0 && p.stock <= 3) out.push({ label: "Selling Fast", bg: "#1d349a" });
   else if (p.tags.includes("Best Choice!")) out.push({ label: "Best Choice!", bg: "#1d349a" });
@@ -186,7 +187,7 @@ export const collections: Collection[] = [
   {
     handle: "marble-products",
     title: "Marble Products",
-    image: "collection-slider-10.jpg",
+    image: "https://s.alicdn.com/@sc04/kf/H7cd77ad85dc241aa80ea231408e90f9c2.jpg_720x720q50.jpg",
     blurb: "Marble effect panels and surfaces. Ask us for current price and availability.",
     match: (p) => p.type === "Marble Products",
   },
@@ -561,6 +562,7 @@ export const featureLinks: NavLink[] = [
 ];
 
 export const circleCats = [
+  { title: "Marble Products", image: "https://s.alicdn.com/@sc04/kf/H7cd77ad85dc241aa80ea231408e90f9c2.jpg_720x720q50.jpg", to: "/pages/marble-products" },
   { title: "Sale Items", image: "collection-sales.webp", to: "/collections/sale-items" },
   { title: "Press Tables", image: "collection-slider-1.jpg", to: "/collections/tables" },
   { title: "Lighting", image: "collection-slider-2.jpg", to: "/collections/lighting" },

@@ -47,7 +47,7 @@ function CircleRow() {
         {circleCats.map((c) => (
           <Link key={c.title} to={c.to} className="group w-[92px] shrink-0 text-center">
             <span className="mx-auto block h-[84px] w-[84px] overflow-hidden rounded-full bg-[#f3f3f3] ring-1 ring-black/5">
-              <img src={file(c.image, 300)} alt="" className="h-full w-full object-cover transition duration-500 group-hover:scale-105" referrerPolicy="no-referrer" />
+              <img src={c.image.startsWith("http") ? c.image : file(c.image, 300)} alt="" className="h-full w-full object-cover transition duration-500 group-hover:scale-105" referrerPolicy="no-referrer" />
             </span>
             <span className="mt-2 block text-[13px] font-bold leading-tight">{c.title}</span>
           </Link>
@@ -264,11 +264,11 @@ function ShopCats() {
           Shop All Products
         </Link>
       </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
         {circleCats.map((c) => (
           <Link key={c.title} to={c.to} className="group">
             <span className="block overflow-hidden rounded-3xl bg-[#f3f3f3]">
-              <img src={file(c.image, 500)} alt="" className="aspect-square w-full object-cover transition duration-500 group-hover:scale-105" referrerPolicy="no-referrer" />
+              <img src={c.image.startsWith("http") ? c.image : file(c.image, 500)} alt="" className="aspect-square w-full object-cover transition duration-500 group-hover:scale-105" referrerPolicy="no-referrer" />
             </span>
             <span className="mt-2 block text-center text-sm font-bold">{c.title}</span>
           </Link>
