@@ -6,7 +6,8 @@ import { Header, MobileMenu } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { Overlays } from "@/components/Overlays";
 import Home from "@/pages/Home";
-import { CheckoutPage, CollectionPage, ProductPage, SearchPage } from "@/pages/Shop";
+import AdminApp from "@/admin/Admin";
+import { CheckoutPage, CollectionPage, MarbleProductsPage, ProductPage, SearchPage } from "@/pages/Shop";
 import {
   AboutPage,
   AccountPage,
@@ -43,6 +44,7 @@ function Shell() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/collections/:handle" element={<CollectionPage />} />
+          <Route path="/pages/marble-products" element={<MarbleProductsPage />} />
           <Route path="/products/:handle" element={<ProductPage />} />
           <Route path="/search" element={<SearchPage />} />
           <Route path="/checkout" element={<CheckoutPage />} />
@@ -68,11 +70,16 @@ function Shell() {
   );
 }
 
+function RouteSurface() {
+  const { pathname } = useLocation();
+  return pathname.startsWith("/admin") ? <AdminApp /> : <Shell />;
+}
+
 export default function App() {
   return (
     <StoreProvider>
       <HashRouter>
-        <Shell />
+        <RouteSurface />
       </HashRouter>
     </StoreProvider>
   );

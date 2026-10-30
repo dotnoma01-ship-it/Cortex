@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1200" role="img" aria-labelledby="title desc">
+  <title id="title">Product image temporarily unavailable</title>
+  <desc id="desc">A neutral fallback shown only when a product image cannot be loaded.</desc>
+  <rect width="1200" height="1200" fill="#f3f3f3"/>
+  <path d="M0 840 310 590l180 145 230-295 480 420v340H0Z" fill="#e7e7e7"/>
+  <path d="M0 940 310 690l180 145 230-295 480 420" fill="none" stroke="#d5d5d5" stroke-width="8"/>
+  <rect x="210" y="790" width="780" height="160" rx="28" fill="#fff"/>
+  <text x="600" y="860" text-anchor="middle" fill="#555" font-family="Arial,sans-serif" font-size="34" font-weight="700">PRODUCT IMAGE</text>
+  <text x="600" y="910" text-anchor="middle" fill="#777" font-family="Arial,sans-serif" font-size="26">IMAGE TEMPORARILY UNAVAILABLE</text>
+</svg>

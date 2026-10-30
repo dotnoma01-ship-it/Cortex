@@ -63,7 +63,7 @@ function load(): Persisted {
     if (raw) {
       const p = JSON.parse(raw) as Persisted;
       return {
-        cart: p.cart ?? [],
+        cart: (p.cart ?? []).filter((line) => Boolean(getProduct(line.handle))),
         wishlist: p.wishlist ?? [],
         compare: p.compare ?? [],
         currency: p.currency ?? "USD",
@@ -122,7 +122,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     (handle: string, variantId: number, qty = 1) => {
       const p = getProduct(handle);
       const v = p?.variants.find((x) => x.id === variantId);
-      if (!p || !v || !v.available || p.tags.includes("Coming Soon") || p.stock === 0) {
+      const preorder = p?.inventoryPolicy === "preorder";
+      if (!p || !v || !v.available || (!preorder && (p.tags.includes("Coming Soon") || p.stock === 0)) || !Number.isInteger(qty) || qty < 1 || qty > 100) {
         notify("This piece is not available to add right now.");
         return;
       }

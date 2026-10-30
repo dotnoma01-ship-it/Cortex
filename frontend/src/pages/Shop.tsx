@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
-  collectionProducts,
   colorOption,
   discountPct,
   file,
   findVariant,
   pickVariant,
+  priceUnitLabel,
   getCollection,
   getProduct,
   img,
@@ -18,6 +18,7 @@ import { Btn, Crumbs, Heart, Money, Qty, Stars, Swatch } from "@/components/ui";
 import { useStore } from "@/context/Store";
 import { cn } from "@/utils/cn";
 import { api, ApiError } from "@/lib/api";
+import { ProductEnquiry } from "@/components/ProductEnquiry";
 
 function useApiProducts() {
   const [items, setItems] = useState(localProducts);
@@ -25,7 +26,12 @@ function useApiProducts() {
   useEffect(() => {
     let active = true;
     void api<{ products: typeof localProducts }>("/products?limit=100")
-      .then((result) => { if (active) setItems(result.products); })
+      .then((result) => {
+        if (!active) return;
+        const localPreorders = localProducts.filter((product) => product.inventoryPolicy === "preorder");
+        const preorderHandles = new Set(localPreorders.map((product) => product.handle));
+        setItems([...result.products.filter((product) => !preorderHandles.has(product.handle)), ...localPreorders]);
+      })
       .catch((err) => { if (active) setError(err instanceof ApiError ? err.message : "Unable to load products."); });
     return () => { active = false; };
   }, []);
@@ -211,12 +217,40 @@ export function CollectionPage() {
   );
 }
 
+export function MarbleProductsPage() {
+  const { items, error } = useApiProducts();
+  const marbleProducts = items.filter((product) => product.type === "Marble Products");
+
+  return (
+    <section className="mx-auto max-w-[1680px] px-4 py-10 sm:px-6 lg:px-10">
+      <Crumbs items={[{ label: "Marble Products" }]} />
+      <header className="mb-8 border-b border-[#eee] pb-6">
+        <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[#1d349a]">Cortex materials</p>
+        <h1 className="mt-2 text-3xl font-bold sm:text-4xl">Marble Products</h1>
+        <p className="mt-2 max-w-2xl text-sm text-[#666]">Review marble-effect panels listed by Cortex. Price and current availability are confirmed on enquiry.</p>
+      </header>
+      {error ? <p className="mb-4 text-sm text-[#666]">{error} Showing products currently available in this browser.</p> : null}
+      {marbleProducts.length ? (
+        <div className="grid grid-cols-2 gap-5 xl:grid-cols-4">
+          {marbleProducts.map((product) => <ProductCard key={product.handle} product={product} />)}
+        </div>
+      ) : (
+        <div className="rounded-2xl bg-[#f6f6f6] px-6 py-14 text-center">
+          <p className="text-lg font-semibold">No marble products are currently listed.</p>
+          <p className="mt-2 text-sm text-[#666]">Please check back while we confirm product details.</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function ProductPage() {
   const { handle = "" } = useParams();
   const [params] = useSearchParams();
   const [remoteProduct, setRemoteProduct] = useState<ReturnType<typeof getProduct>>();
   const [productError, setProductError] = useState("");
-  const product = remoteProduct ?? getProduct(handle);
+  const localProduct = getProduct(handle);
+  const product = localProduct?.inventoryPolicy === "preorder" ? localProduct : remoteProduct ?? localProduct;
   const gallery = params.get("gallery") || "vertical";
   const swatch = params.get("swatch") === "image" ? "image" : "color";
   const store = useStore();
@@ -277,14 +311,19 @@ export function ProductPage() {
   const images = product.images.length ? product.images : [variant.image || ""];
   const active = images[Math.min(shot, images.length - 1)];
   const coming = product.tags.includes("Coming Soon");
-  const sold = product.stock === 0 || product.handle === "victoria-ottoman" || !variant.available;
+  const preorder = product.inventoryPolicy === "preorder";
+  const sold = !preorder && (product.stock === 0 || product.handle === "victoria-ottoman" || !variant.available);
   const pct = discountPct(variant.price, variant.compare);
   const more = related(product, 4);
+  const selectedOptions = product.options.map((option, index) => {
+    const value = index === 0 ? variant.option1 : variant.option2;
+    return value ? `${option.name}: ${value}` : null;
+  }).filter((value): value is string => Boolean(value));
 
   return (
     <div className="mx-auto max-w-[1680px] px-4 py-8 sm:px-6 lg:px-10">
       {productError ? <p className="mb-3 text-sm text-[#666]">{productError} Showing the catalog currently available in this browser.</p> : null}
-      <Crumbs items={[{ label: product.type, to: `/collections/${product.type === "Lamps" ? "lighting" : "all"}` }, { label: product.title }]} />
+      <Crumbs items={[{ label: product.type, to: product.type === "Marble Products" ? "/pages/marble-products" : `/collections/${product.type === "Lamps" ? "lighting" : "all"}` }, { label: product.title }]} />
       <div className="grid gap-10 lg:grid-cols-2">
         <Gallery images={images} active={active} shot={shot} setShot={setShot} gallery={gallery} title={product.title} />
         <div className="lg:sticky lg:top-36 lg:self-start">
@@ -300,26 +339,27 @@ export function ProductPage() {
               <Heart filled={store.wished(product.handle)} />
             </button>
           </div>
-          <div className="mt-3 flex items-center gap-3">
+          {!preorder ? <div className="mt-3 flex items-center gap-3">
             <Stars value={product.rating} />
             <span className="text-sm text-[#666]">{product.rating} · {product.reviews} reviews</span>
-          </div>
+          </div> : null}
           <div className="mt-4 text-2xl">
-            <Money amount={variant.price} compare={variant.compare} />
+            <><Money amount={variant.price} compare={variant.compare} /><span className="ml-2 text-sm text-[#666]">{priceUnitLabel(product)}</span></>
           </div>
-          <div className="mt-4 flex flex-wrap gap-4 text-sm font-semibold">
+          {product.priceStatus === "estimated" ? <p className="mt-1 text-xs font-semibold text-[#8a5a00]">Estimated Cortex retail price · review pending</p> : null}
+          {!preorder ? <div className="mt-4 flex flex-wrap gap-4 text-sm font-semibold">
             {["Modern", "Eco-certified", "Warranty"].map((t) => (
               <span key={t} className="inline-flex items-center gap-2">
                 <span className="grid h-8 w-8 place-items-center rounded-full bg-[#ededed] text-[#1d349a]">✦</span>
                 {t}
               </span>
             ))}
-          </div>
-          {product.stock > 0 && product.stock <= 5 && !coming ? (
+          </div> : null}
+          {!preorder && product.stock > 0 && product.stock <= 5 && !coming ? (
             <p className="mt-4 text-sm font-bold text-[#c4301c]">Hurry up, only {product.stock} items left in stock.</p>
           ) : null}
           <p className="mt-3 text-sm text-[#444]">{product.desc}</p>
-          <p className="mt-3 rounded-2xl bg-[#f4f691] px-4 py-3 text-sm font-semibold">Limited offer: $20 off orders past $1,000 — applied automatically at checkout.</p>
+          {!preorder ? <p className="mt-3 rounded-2xl bg-[#f4f691] px-4 py-3 text-sm font-semibold">Limited offer: $20 off orders past $1,000 — applied automatically at checkout.</p> : null}
 
           {colors ? (
             <div className="mt-5">
@@ -367,12 +407,17 @@ export function ProductPage() {
             </div>
           ) : null}
 
-          <div className="mt-5 rounded-2xl border border-[#eee] p-4 text-sm">
+          {!preorder ? <div className="mt-5 rounded-2xl border border-[#eee] p-4 text-sm">
             <p className="font-bold">Volume pricing</p>
             <p className="text-[#666]">5+ save 5% · 10+ save 10% on this piece. Discount shows in the cart.</p>
-          </div>
+          </div> : null}
 
-          {coming || sold ? (
+          {preorder ? (
+            <div className="mt-5 rounded-2xl bg-[#f6f6f6] p-4 text-sm text-[#444]">
+              <p className="font-bold">Pre-order · supplier availability not yet confirmed</p>
+              <p className="mt-1">Your payment uses this estimated Cortex price. We will confirm supply and delivery timing after checkout. If we cannot secure the selected configuration, we will cancel and refund the order.</p>
+            </div>
+          ) : coming || sold ? (
             <form
               className="mt-5"
               onSubmit={(e) => {
@@ -402,12 +447,14 @@ export function ProductPage() {
             </div>
           )}
 
-          <ul className="mt-5 space-y-1 text-sm text-[#444]">
+          <ProductEnquiry productTitle={product.title} productUrl={window.location.href} selectedOptions={selectedOptions} />
+
+          {!preorder ? <ul className="mt-5 space-y-1 text-sm text-[#444]">
             <li>Free international shipping over $500</li>
             <li>Free returns within 30 days</li>
             <li>In-store pickup from New York, Miami, and Los Angeles</li>
-          </ul>
-          <form
+          </ul> : null}
+          {!preorder ? <form
             className="mt-4 flex gap-2"
             onSubmit={(e) => {
               e.preventDefault();
@@ -416,39 +463,39 @@ export function ProductPage() {
           >
             <input value={zip} onChange={(e) => setZip(e.target.value)} placeholder="Estimate delivery ZIP" className="h-11 flex-1 rounded-full bg-[#ededed] px-4 text-sm outline-none" />
             <button className="h-11 rounded-full bg-[#ededed] px-4 text-sm font-bold">Check</button>
-          </form>
+          </form> : null}
           {eta ? <p className="mt-2 text-sm font-semibold">{eta}</p> : null}
           <div className="mt-4 flex gap-3 text-sm font-bold">
-            <button type="button" className="underline" onClick={() => store.toggleCompare(product.handle)}>
+            {!preorder ? <button type="button" className="underline" onClick={() => store.toggleCompare(product.handle)}>
               {store.compare.includes(product.handle) ? "In compare" : "Add to compare"}
-            </button>
-            <Link to="/pages/find-a-store" className="underline">
-              Find in store
-            </Link>
+            </button> : null}
+            {!preorder ? <Link to="/pages/find-a-store" className="underline">Find in store</Link> : null}
           </div>
         </div>
       </div>
 
       <div className="mt-14 border-t pt-8">
         <div className="flex gap-6 border-b">
-          {["Description", "Specifications", "Shipping", "Reviews"].map((t) => (
+          {(preorder ? ["Description", "Specifications"] : ["Description", "Specifications", "Shipping", "Reviews"]).map((t) => (
             <button key={t} type="button" onClick={() => setTab(t)} className={cn("pb-3 text-sm font-bold", tab === t ? "border-b-2 border-black" : "text-[#888]")}>
               {t}
             </button>
           ))}
         </div>
         <div className="max-w-3xl py-6 text-sm leading-relaxed text-[#444]">
-          {tab === "Description" ? <p>{product.desc} Designed to sit beside other Cortex pieces without matching them. The finish is meant to be lived with — a mark is a history, not a defect.</p> : null}
+          {tab === "Description" ? <p>{product.desc}{!preorder ? " Designed to sit beside other Cortex pieces without matching them. The finish is meant to be lived with — a mark is a history, not a defect." : ""}</p> : null}
           {tab === "Specifications" ? (
             <table className="w-full text-left">
               <tbody>
                 {[
-                  ["Brand", "Cortex"],
-                  ["Origin", product.origin],
-                  ["Dimensions", product.dims],
-                  ["Seat height", product.seat],
-                  ["Weight", product.weight],
-                  ["SKU", product.sku],
+                  ...(preorder ? [["Dimensions / listed range", product.dims], ["Availability", "Pre-order; supplier availability confirmed after checkout"]] : [
+                    ["Brand", "Cortex"],
+                    ["Origin", product.origin],
+                    ["Dimensions", product.dims],
+                    ["Seat height", product.seat],
+                    ["Weight", product.weight],
+                    ["SKU", product.sku],
+                  ]),
                 ].map(([k, v]) => (
                   <tr key={k} className="border-b border-[#eee]">
                     <th className="py-3 pr-4 font-bold text-black">{k}</th>
@@ -479,7 +526,7 @@ export function ProductPage() {
         </div>
       </div>
 
-      <section className="mt-10 grid gap-6 rounded-3xl bg-[#f7f7f7] p-6 sm:p-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+      {!preorder ? <section className="mt-10 grid gap-6 rounded-3xl bg-[#f7f7f7] p-6 sm:p-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#1d349a]">Craftsmanship</p>
           <h2 className="mt-2 text-3xl font-bold">Make it yours</h2>
@@ -512,7 +559,7 @@ export function ProductPage() {
             referrerPolicy="no-referrer"
           />
         </div>
-      </section>
+      </section> : null}
 
       <div className="mt-12">
         <h2 className="mb-5 text-2xl font-bold">You may also like</h2>
@@ -537,6 +584,7 @@ export function ProductPage() {
                 alt=""
                 className="h-12 w-12 shrink-0 rounded-xl bg-[#f3f3f3] object-cover"
                 referrerPolicy="no-referrer"
+                onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = "/images/marble-product-placeholder.svg"; }}
               />
               <div className="min-w-0">
                 <p className="truncate font-bold">{product.title}</p>
@@ -575,7 +623,7 @@ function Gallery({
     return (
       <div className="grid grid-cols-2 gap-3">
         {images.map((src, i) => (
-          <img key={src + i} src={img(src, 900)} alt={title} className="aspect-square w-full rounded-2xl object-cover bg-[#f3f3f3]" referrerPolicy="no-referrer" />
+          <img key={src + i} src={img(src, 900)} alt={title} className="aspect-square w-full rounded-2xl object-cover bg-[#f3f3f3]" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = "/images/marble-product-placeholder.svg"; }} />
         ))}
       </div>
     );
@@ -583,9 +631,9 @@ function Gallery({
   if (gallery === "mix") {
     return (
       <div className="grid grid-cols-2 gap-3">
-        <img src={img(images[0], 1000)} alt={title} className="col-span-2 aspect-[4/3] w-full rounded-2xl object-cover bg-[#f3f3f3]" referrerPolicy="no-referrer" />
+        <img src={img(images[0], 1000)} alt={title} className="col-span-2 aspect-[4/3] w-full rounded-2xl object-cover bg-[#f3f3f3]" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = "/images/marble-product-placeholder.svg"; }} />
         {images.slice(1).map((src, i) => (
-          <img key={src + i} src={img(src, 700)} alt="" className="aspect-square w-full rounded-2xl object-cover bg-[#f3f3f3]" referrerPolicy="no-referrer" />
+          <img key={src + i} src={img(src, 700)} alt="" className="aspect-square w-full rounded-2xl object-cover bg-[#f3f3f3]" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = "/images/marble-product-placeholder.svg"; }} />
         ))}
       </div>
     );
@@ -594,7 +642,7 @@ function Gallery({
     <div className={cn("flex gap-2", gallery === "vertical" ? "flex-col" : "mt-3 flex-row")}>
       {images.map((src, i) => (
         <button key={src + i} type="button" onClick={() => setShot(i)} className={cn("overflow-hidden rounded-xl bg-[#f3f3f3]", gallery === "vertical" ? "h-20 w-20" : "h-16 w-16", i === shot && "ring-2 ring-black")}>
-          <img src={img(src, 160)} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+          <img src={img(src, 160)} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = "/images/marble-product-placeholder.svg"; }} />
         </button>
       ))}
     </div>
@@ -603,7 +651,7 @@ function Gallery({
     <div className={cn(gallery === "vertical" && "flex gap-3")}>
       {gallery === "vertical" ? thumbs : null}
       <div className="relative min-w-0 flex-1 overflow-hidden rounded-3xl bg-[#f3f3f3]">
-        <img src={img(active, 1400)} alt={title} className="aspect-square w-full object-cover" referrerPolicy="no-referrer" />
+        <img src={img(active, 1400)} alt={title} className="aspect-square w-full object-cover" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = "/images/marble-product-placeholder.svg"; }} />
       </div>
       {gallery !== "vertical" ? thumbs : null}
     </div>
@@ -821,6 +869,7 @@ export function CheckoutPage() {
         }}
       >
         <h1 className="text-3xl font-bold">Checkout</h1>
+        {s.cart.some((line) => getProduct(line.handle)?.inventoryPolicy === "preorder") ? <p className="rounded-2xl bg-[#f6f6f6] p-4 text-sm text-[#444]">This cart contains pre-order items priced using Cortex estimates. Supplier availability and delivery timing will be confirmed after payment. If we cannot secure an item, we will cancel it and refund its payment.</p> : null}
 
         <Field name="email" label="Email" type="email" />
 
@@ -912,11 +961,14 @@ export function CheckoutPage() {
                 alt=""
                 className="h-16 w-16 rounded-xl object-cover"
                 referrerPolicy="no-referrer"
+                onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = "/images/marble-product-placeholder.svg"; }}
               />
 
               <div className="flex-1 text-sm">
                 <p className="font-bold">{product.title}</p>
-                <p className="text-[#666]">Qty {line.qty}</p>
+                <p className="text-xs text-[#666]">{product.variants.find((variant) => variant.id === line.variantId)?.title}</p>
+                <p className="text-[#666]">Qty {line.qty}{product.saleUnit && product.saleUnit !== "piece" ? ` ${product.saleUnit}` : ""}</p>
+                {product.priceStatus === "estimated" ? <p className="text-xs text-[#8a5a00]">Estimated Cortex price</p> : null}
               </div>
 
               <Money

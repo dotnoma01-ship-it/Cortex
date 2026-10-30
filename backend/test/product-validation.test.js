@@ -13,3 +13,22 @@ test("product model rejects negative stock and accepts catalog-shaped variants",
   product.stock = 2;
   assert.equal(product.validateSync(), undefined);
 });
+
+test("estimated preorder products accept zero counted stock and purchasable variants", () => {
+  const product = new Product({
+    externalId: "marble-preorder-1",
+    handle: "marble-preorder-piece",
+    title: "Marble Pre-order Piece",
+    type: "Marble Products",
+    sku: "MARBLE-PREORDER-1",
+    stock: 0,
+    inventoryPolicy: "preorder",
+    priceStatus: "estimated",
+    saleUnit: "piece",
+    variants: [{ externalId: "marble-variant-1", title: "Standard", price: 28, available: true }],
+  });
+
+  assert.equal(product.validateSync(), undefined);
+  assert.equal(product.stock, 0);
+  assert.equal(product.inventoryPolicy, "preorder");
+});

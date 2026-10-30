@@ -126,7 +126,7 @@ export function Qty({
         type="button"
         aria-label={`Increase quantity${label ? ` for ${label}` : ""}`}
         className="h-full w-11 text-lg"
-        onClick={() => onChange(value + 1)}
+        onClick={() => onChange(Math.min(100, value + 1))}
       >
         +
       </button>

@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, NavLink, useNavigate } from "react-router-dom";
 import {
   CURRENCIES,
   LOGO,
@@ -247,6 +247,9 @@ export function Header() {
             </Link>
           </li>
           <li onMouseEnter={() => setOpen(null)}>
+            <NavLink to="/pages/marble-products" className={({ isActive }) => cn("inline-flex items-center", isActive && "text-[#1d349a]")}>Marble Products</NavLink>
+          </li>
+          <li onMouseEnter={() => setOpen(null)}>
             <Link to="/collections/sale-items" className="inline-flex items-center gap-1.5 text-[#1d349a]">
               <span className="twinkle">✦</span> On Sale
             </Link>
@@ -479,6 +482,9 @@ export function MobileMenu() {
           <Link to="/collections/sale-items" className="mt-3 block font-bold text-[#1d349a]" onClick={() => store.setMenuOpen(false)}>
             ✦ On Sale
           </Link>
+          <NavLink to="/pages/marble-products" className={({ isActive }) => cn("mt-3 block font-bold", isActive ? "text-[#1d349a]" : "text-[#111]")} onClick={() => store.setMenuOpen(false)}>
+            Marble Products
+          </NavLink>
         </div>
         <div className="border-t px-5 py-4 text-sm">
           <Link to="/account" className="font-bold" onClick={() => store.setMenuOpen(false)}>

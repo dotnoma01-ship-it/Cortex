@@ -1,0 +1,124 @@
+{
+  "status": "draft-only-not-published",
+  "purpose": "Alibaba sourcing candidates pending Cortex retail pricing, inventory, image, and listing-detail confirmation. This file is not imported by the storefront and is not a valid live Product[] catalogue.",
+  "products": [
+    {
+      "title": "High Glossy PVC Panel UV Marble Sheet 3mm Flexible PVC Wall Panel Board",
+      "supplier": {
+        "name": "Shandong Baiyi New Material Technology Co., Ltd.",
+        "listingUrl": "https://www.alibaba.com/product-detail/High-Glossy-Pvc-panel-UV-Marble_1600929774273.html",
+        "model": "BY-U023"
+      },
+      "supplierResearch": {
+        "priceCurrency": "USD",
+        "priceUnit": "piece",
+        "priceTiers": [
+          { "quantityMin": 50, "quantityMax": 99, "unitPrice": 12 },
+          { "quantityMin": 100, "quantityMax": null, "unitPrice": 11 }
+        ],
+        "minimumOrderQuantity": { "value": 50, "unit": "pieces", "status": "listed" },
+        "dimensions": { "width": 1220, "length": 2440, "unit": "mm", "status": "listed" },
+        "thickness": { "minimum": 1.3, "maximum": 6, "unit": "mm", "status": "listed-range; exact selectable variants unconfirmed" },
+        "material": "PVC resin",
+        "surfaceFinish": "UV coating",
+        "listedColourAndPatternFamilies": ["marble", "wood grain", "solid colour", "3D colour"],
+        "specificSelectablePatterns": null,
+        "installationMethod": null,
+        "shipping": {
+          "dispatchPort": "Qingdao",
+          "shippingCost": null,
+          "destinationDeliveryTerms": null
+        },
+        "sourceStatus": "Listing researched; reconfirm current quote and exact options with supplier"
+      },
+      "cortexCatalogueDraft": {
+        "id": null,
+        "handle": null,
+        "sku": null,
+        "type": null,
+        "retailPriceUSD": null,
+        "stock": null,
+        "images": [],
+        "verifiedDirectImageUrls": [],
+        "variants": [],
+        "rating": null,
+        "reviews": null
+      },
+      "publicationBlockers": [
+        "Cortex USD retail price and pricing rule not approved",
+        "Cortex inventory quantity and availability not confirmed",
+        "No stable direct product image URLs verified",
+        "Exact selectable thickness and pattern variants need confirmation",
+        "Shipping cost and destination delivery terms need a quote"
+      ]
+    },
+    {
+      "title": "Modern Home Decor Style Flexible PVC Plastic UV Marble Sheet / Artificial Marble Alternative Wall Panel & Board",
+      "supplier": {
+        "name": "Haining Longtime Industry Co., Ltd.",
+        "listingUrl": "https://www.alibaba.com/product-detail/Modern-Home-Decor-Style-Flexible-PVC_1601396428054.html",
+        "model": "P-PMS-01"
+      },
+      "supplierResearch": {
+        "priceCurrency": "USD",
+        "priceUnit": "piece",
+        "priceTiers": [
+          { "quantityMin": 50, "quantityMax": 499, "unitPrice": 11.9 },
+          { "quantityMin": 500, "quantityMax": 1499, "unitPrice": 8.9 },
+          { "quantityMin": 1500, "quantityMax": null, "unitPrice": 5.9 }
+        ],
+        "minimumOrderQuantity": { "value": null, "unit": "pieces", "status": "not confirmed; first listed price tier begins at 50 pieces" },
+        "dimensions": {
+          "width": 1220,
+          "widthUnit": "mm",
+          "listedLengths": [2440, 2800, 2900],
+          "lengthUnit": "mm",
+          "customSizesMentioned": true,
+          "status": "listed; exact current selectable sizes need confirmation"
+        },
+        "thickness": {
+          "conflictingListingValues": ["2.5 mm, 2.8 mm, 3.0 mm", "2–5 mm"],
+          "confirmedValue": null,
+          "status": "conflicting; do not use as settled variants"
+        },
+        "materialComposition": {
+          "conflictingListingValues": ["35% PVC, 60% CaCO3, 5% additives", "35% PVC, 62% CaCO3, 3% additives"],
+          "confirmedValue": null,
+          "status": "conflicting; supplier confirmation required"
+        },
+        "surfaceFinish": "Hot stamping, UV coating, and PE protective film listed",
+        "listedColourAndPatternFamilies": ["marble grain", "wood grain", "solid colour", "3D design"],
+        "specificSelectablePatterns": null,
+        "installationMethods": ["aluminium frame", "glue"],
+        "shipping": {
+          "shippingCost": null,
+          "destinationDeliveryTerms": null,
+          "status": "fee and delivery date to be negotiated"
+        },
+        "sourceStatus": "Listing researched; reconfirm current quote, MOQ, composition, thickness, and options with supplier"
+      },
+      "cortexCatalogueDraft": {
+        "id": null,
+        "handle": null,
+        "sku": null,
+        "type": null,
+        "retailPriceUSD": null,
+        "stock": null,
+        "images": [],
+        "verifiedDirectImageUrls": [],
+        "variants": [],
+        "rating": null,
+        "reviews": null
+      },
+      "publicationBlockers": [
+        "Cortex USD retail price and pricing rule not approved",
+        "Cortex inventory quantity and availability not confirmed",
+        "No stable direct product image URLs verified",
+        "MOQ needs supplier confirmation",
+        "Thickness and material composition conflict in listing and need supplier confirmation",
+        "Exact selectable sizes, colours, and patterns need confirmation",
+        "Shipping cost and destination delivery terms need a quote"
+      ]
+    }
+  ]
+}

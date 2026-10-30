@@ -6,6 +6,7 @@ import {
   findVariant,
   img,
   priceRange,
+  priceUnitLabel,
   type Product,
 } from "@/data/catalog";
 import { useStore } from "@/context/Store";
@@ -31,7 +32,8 @@ export function ProductCard({
   const shot = variant.image || product.images[0];
   const alt = product.images.find((i) => i !== shot) || product.images[1];
   const marks = badges(product);
-  const coming = product.tags.includes("Coming Soon") || product.stock === 0;
+  const preorder = product.inventoryPolicy === "preorder";
+  const coming = product.tags.includes("Coming Soon") || (!preorder && product.stock === 0);
   const saved = wished(product.handle);
   const compared = compare.includes(product.handle);
 
@@ -56,6 +58,7 @@ export function ProductCard({
             src={img(shot, 800)}
             alt={product.title}
             referrerPolicy="no-referrer"
+            onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = "/images/marble-product-placeholder.svg"; }}
             className={cn(
               "h-full w-full object-cover transition duration-500",
               hover && alt ? "opacity-0" : "opacity-100",
@@ -67,6 +70,7 @@ export function ProductCard({
               src={img(alt, 800)}
               alt=""
               referrerPolicy="no-referrer"
+              onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = "/images/marble-product-placeholder.svg"; }}
               className={cn(
                 "absolute inset-0 h-full w-full object-cover transition duration-500",
                 hover ? "opacity-100" : "opacity-0",
@@ -125,13 +129,13 @@ export function ProductCard({
       </div>
       <div className={cn("pt-3", layout === "list" && "flex flex-col justify-center pt-0")}>
         <p className="text-[12px] font-semibold uppercase tracking-wide text-[#888]">{product.type}</p>
-        <Link to={`/products/${product.handle}`} className="mt-0.5 block font-semibold leading-snug hover:underline">
+        <Link to={`/products/${product.handle}`} className="mt-0.5 line-clamp-2 min-h-[2.75rem] block font-semibold leading-snug hover:underline">
           {product.title}
         </Link>
         <div className="mt-1">
-          <Money amount={range.min} compare={!range.from ? range.compare : null} />
-          {range.from ? <span className="ml-1 text-[13px] text-[#666]">from</span> : null}
+          <><Money amount={range.min} compare={!range.from ? range.compare : null} /><span className="ml-1 text-[12px] text-[#666]">{priceUnitLabel(product)}</span>{range.from ? <span className="ml-1 text-[13px] text-[#666]">from</span> : null}</>
         </div>
+        {product.priceStatus === "estimated" ? <p className="mt-0.5 text-[11px] font-semibold text-[#8a5a00]">Estimated price · pre-order</p> : null}
         {colors && colors.values.length > 0 ? (
           <div className="mt-2.5 flex flex-wrap gap-1.5">
             {colors.values.slice(0, 5).map((c) => {

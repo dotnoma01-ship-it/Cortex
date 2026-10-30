@@ -29,6 +29,9 @@ export type Product = {
   seat: string;
   origin: string;
   sku: string;
+  inventoryPolicy?: "stock" | "preorder";
+  priceStatus?: "approved" | "estimated";
+  saleUnit?: "piece" | "slab" | "m²";
 };
 
 export const products = raw as Product[];
@@ -114,13 +117,19 @@ export function discountPct(price: number, compare?: number | null) {
   return Math.round((1 - price / compare) * 100);
 }
 
+export function priceUnitLabel(p: Product) {
+  return p.saleUnit && p.saleUnit !== "piece" ? ` / ${p.saleUnit}` : " each";
+}
+
 export type Badge = { label: string; bg: string };
 
 export function badges(p: Product): Badge[] {
   const out: Badge[] = [];
-  if (p.tags.includes("Coming Soon")) out.push({ label: "Coming Soon", bg: "#7A34D6" });
+  if (p.inventoryPolicy === "preorder") out.push({ label: "Pre-order", bg: "#1d349a" });
+  else if (p.tags.includes("Coming Soon")) out.push({ label: "Coming Soon", bg: "#7A34D6" });
   else if (p.stock === 0) out.push({ label: "Sold Out", bg: "#ADADAD" });
   else if (isSale(p)) out.push({ label: "Sale", bg: "#C4301C" });
+  if (p.priceStatus === "estimated") out.push({ label: "Estimated price", bg: "#555" });
   if (p.tags.includes("New")) out.push({ label: "New", bg: "#0d8756" });
   if (p.stock > 0 && p.stock <= 3) out.push({ label: "Selling Fast", bg: "#1d349a" });
   else if (p.tags.includes("Best Choice!")) out.push({ label: "Best Choice!", bg: "#1d349a" });
@@ -174,6 +183,13 @@ const titleHas = (re: RegExp) => (p: Product) => re.test(p.title);
 const decorTypes = ["Accessories", "Candles", "Vases", "Pillows", "Towels", "Planters", "Bowls", "Rugs", "Ottomans"];
 
 export const collections: Collection[] = [
+  {
+    handle: "marble-products",
+    title: "Marble Products",
+    image: "collection-slider-10.jpg",
+    blurb: "Marble effect panels and surfaces. Ask us for current price and availability.",
+    match: (p) => p.type === "Marble Products",
+  },
   {
     handle: "all",
     title: "All Products",
@@ -561,6 +577,7 @@ export const circleCats = [
 
 export const searchTypes = [
   "All Categories",
+  "Marble Products",
   "Accessories",
   "Armchairs",
   "Bar Stools",

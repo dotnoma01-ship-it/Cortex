@@ -8,6 +8,7 @@ import {
   getProduct,
   img,
   posts,
+  priceUnitLabel,
   products,
   stores,
 } from "@/data/catalog";
@@ -15,6 +16,7 @@ import { useStore } from "@/context/Store";
 import { Btn, Crumbs, Money, Stars } from "@/components/ui";
 import { ProductCard } from "@/components/ProductCard";
 import { api, ApiError } from "@/lib/api";
+import { ProductEnquiry } from "@/components/ProductEnquiry";
 
 export function AboutPage() {
   return (
@@ -60,41 +62,15 @@ export function AboutPage() {
 }
 
 export function ContactPage() {
-  const [sent, setSent] = useState(false);
   return (
     <div className="mx-auto grid max-w-5xl gap-10 px-6 py-12 lg:grid-cols-2">
       <div>
         <Crumbs items={[{ label: "Contact" }]} />
         <h1 className="text-4xl font-bold">Contact</h1>
         <p className="mt-3 text-[#555]">Write to the studio for a project, a trade account, or a piece you cannot find.</p>
-        <ul className="mt-6 space-y-2 text-sm">
-          <li><strong>Email</strong> touch@Cortexstore.com</li>
-          <li><strong>Phone</strong> +1 888-234-1234</li>
-          <li><strong>Hours</strong> Mon–Sat, 9am–6pm EST</li>
-        </ul>
+        <p className="mt-6 text-sm text-[#555]">Use the configured email form or continue the conversation in WhatsApp. Product questions can include the product page link and selected options.</p>
       </div>
-      {sent ? (
-        <p className="rounded-3xl bg-[#f4f691] p-8 font-bold">Message received. A person — not a queue — will reply.</p>
-      ) : (
-        <form
-          className="space-y-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            setSent(true);
-          }}
-        >
-          <input required placeholder="Name" className="h-12 w-full rounded-2xl bg-[#ededed] px-4 outline-none" />
-          <input required type="email" placeholder="Email" className="h-12 w-full rounded-2xl bg-[#ededed] px-4 outline-none" />
-          <select className="h-12 w-full rounded-2xl bg-[#ededed] px-4">
-            <option>General</option>
-            <option>Trade / wholesale</option>
-            <option>Order support</option>
-            <option>Press</option>
-          </select>
-          <textarea required placeholder="Message" className="h-36 w-full rounded-2xl bg-[#ededed] p-4 outline-none" />
-          <Btn type="submit">Send</Btn>
-        </form>
-      )}
+      <ProductEnquiry />
     </div>
   );
 }
@@ -225,14 +201,14 @@ export function ComparePage() {
     );
   }
   const rows: [string, (p: NonNullable<(typeof list)[number]>) => string][] = [
-    ["Price", (p) => formatMoney(p.variants[0].price, currency)],
+    ["Price", (p) => `${formatMoney(p.variants[0].price, currency)}${priceUnitLabel(p)}${p.priceStatus === "estimated" ? " (estimate)" : ""}`],
     ["Type", (p) => p.type],
     ["Rating", (p) => String(p.rating)],
     ["Dimensions", (p) => p.dims],
     ["Seat", (p) => p.seat],
     ["Weight", (p) => p.weight],
     ["Origin", (p) => p.origin],
-    ["Stock", (p) => (p.stock ? `${p.stock} in studio` : "Waitlist")],
+    ["Stock", (p) => p.inventoryPolicy === "preorder" ? "Pre-order; supplier availability confirmed after checkout" : p.stock ? `${p.stock} in studio` : "Waitlist"],
   ];
   return (
     <div className="mx-auto max-w-[1680px] overflow-auto px-6 py-10">
@@ -383,12 +359,10 @@ export function QuickOrderPage() {
                   <Link to={`/products/${p.handle}`} className="font-semibold hover:underline">{p.title}</Link>
                 </td>
                 <td className="text-[#666]">{p.sku}</td>
-                <td><Money amount={p.variants[0].price} /></td>
+                <td><Money amount={p.variants[0].price} /><span className="ml-1 text-xs">{priceUnitLabel(p)}</span>{p.priceStatus === "estimated" ? <span className="ml-1 text-xs text-[#8a5a00]">Est.</span> : null}</td>
                 <td>
                   <input
-                    type="number"
-                    min={0}
-                    value={qty[p.handle] || 0}
+                    type="number" min={0} value={qty[p.handle] || 0}
                     onChange={(e) => setQty({ ...qty, [p.handle]: Number(e.target.value) })}
                     className="h-10 w-20 rounded-xl bg-[#ededed] px-2"
                   />
@@ -398,7 +372,7 @@ export function QuickOrderPage() {
           </tbody>
         </table>
       </div>
-      <Btn
+      {rows.length > 0 ? <Btn
         className="mt-6"
         onClick={() => {
           rows.forEach((p) => {
@@ -408,7 +382,7 @@ export function QuickOrderPage() {
         }}
       >
         Add selected to cart
-      </Btn>
+      </Btn> : null}
     </div>
   );
 }

@@ -12,6 +12,9 @@ const itemSchema = new mongoose.Schema(
     variantExternalId: String,
     variantTitle: String,
     image: String,
+    inventoryPolicy: { type: String, enum: ["stock", "preorder"], default: "stock" },
+    priceStatus: { type: String, enum: ["approved", "estimated"], default: "approved" },
+    saleUnit: { type: String, enum: ["piece", "slab", "m²"], default: "piece" },
     price: {
       type: Number,
       min: 0,
@@ -121,6 +124,7 @@ const orderSchema = new mongoose.Schema(
       type: String,
       enum: [
         "pending",
+        "awaiting-sourcing",
         "processing",
         "shipped",
         "delivered",
@@ -131,6 +135,11 @@ const orderSchema = new mongoose.Schema(
     },
 
     stockCommitted: {
+      type: Boolean,
+      default: false,
+    },
+
+    requiresSupplierSourcing: {
       type: Boolean,
       default: false,
     },

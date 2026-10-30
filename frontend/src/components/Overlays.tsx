@@ -4,6 +4,7 @@ import {
   colorOption,
   findVariant,
   pickVariant,
+  priceUnitLabel,
   formatMoney,
   getProduct,
   img,
@@ -78,7 +79,7 @@ function CartDrawer() {
                 return (
                   <li key={line.variantId} className="flex gap-3">
                     <Link to={`/products/${p.handle}`} onClick={() => s.setCartOpen(false)}>
-                      <img src={img(v.image || p.images[0], 200)} alt="" className="h-24 w-24 rounded-xl object-cover bg-[#f3f3f3]" referrerPolicy="no-referrer" />
+                      <img src={img(v.image || p.images[0], 200)} alt="" className="h-24 w-24 rounded-xl object-cover bg-[#f3f3f3]" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = "/images/marble-product-placeholder.svg"; }} />
                     </Link>
                     <div className="min-w-0 flex-1">
                       <div className="flex justify-between gap-2">
@@ -90,6 +91,8 @@ function CartDrawer() {
                         </button>
                       </div>
                       <p className="text-xs text-[#666]">{v.title}</p>
+                      <p className="text-xs text-[#666]">Qty {line.qty}{p.saleUnit && p.saleUnit !== "piece" ? ` ${p.saleUnit}` : ""}</p>
+                      {p.priceStatus === "estimated" ? <p className="text-[11px] text-[#8a5a00]">Estimated Cortex price · pre-order</p> : null}
                       {volumeRate(line.qty) > 0 ? (
                         <p className="text-xs font-bold text-[#0d8756]">Volume −{volumeRate(line.qty) * 100}%</p>
                       ) : null}
@@ -154,6 +157,7 @@ function CartDrawer() {
               <span>Total</span>
               <Money amount={s.total} />
             </div>
+            {s.cart.some((line) => getProduct(line.handle)?.inventoryPolicy === "preorder") ? <p className="mt-2 rounded-xl bg-[#f6f6f6] p-3 text-xs text-[#555]">Pre-order items are charged at the displayed estimate. Supply and delivery are confirmed after checkout; items that cannot be sourced will be cancelled and refunded.</p> : null}
             <p className="mt-1 text-xs text-[#888]">Taxes and shipping calculated at checkout.</p>
             <Btn className="mt-3 w-full" to="/checkout" onClick={() => s.setCartOpen(false)}>
               Checkout
@@ -185,7 +189,8 @@ function QuickView() {
     ...(colors && color ? { [colors.name]: color } : {}),
     ...(other && mat ? { [other.name]: mat } : {}),
   });
-  const coming = p.tags.includes("Coming Soon") || p.stock === 0;
+  const preorder = p.inventoryPolicy === "preorder";
+  const coming = p.tags.includes("Coming Soon") || (!preorder && p.stock === 0);
   return (
     <div className="fixed inset-0 z-[60] grid place-items-center p-4">
       <button className="absolute inset-0 bg-black/45" aria-label="Close quick view" onClick={() => s.setQuick(null)} />
@@ -193,13 +198,12 @@ function QuickView() {
         <button type="button" className="absolute right-4 top-4 z-10" aria-label="Close" onClick={() => s.setQuick(null)}>
           <CloseIcon />
         </button>
-        <img src={img(variant.image || p.images[0], 1000)} alt={p.title} className="h-full max-h-[70vh] w-full object-cover bg-[#f3f3f3]" referrerPolicy="no-referrer" />
+        <img src={img(variant.image || p.images[0], 1000)} alt={p.title} className="h-full max-h-[70vh] w-full object-cover bg-[#f3f3f3]" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = "/images/marble-product-placeholder.svg"; }} />
         <div className="p-6 md:p-8">
           <p className="text-xs font-bold uppercase tracking-wide text-[#888]">{p.type}</p>
           <h3 className="mt-1 text-2xl font-bold">{p.title}</h3>
-          <div className="mt-2">
-            <Money amount={variant.price} compare={variant.compare} />
-          </div>
+          <div className="mt-2"><Money amount={variant.price} compare={variant.compare} /><span className="ml-1 text-sm text-[#666]">{priceUnitLabel(p)}</span></div>
+          {p.priceStatus === "estimated" ? <p className="mt-1 text-xs font-semibold text-[#8a5a00]">Estimated Cortex retail price · review pending</p> : null}
           <p className="mt-3 text-sm text-[#555]">{p.desc}</p>
           {colors ? (
             <div className="mt-4">
@@ -223,6 +227,7 @@ function QuickView() {
               </div>
             </div>
           ) : null}
+          {preorder ? <p className="mt-5 rounded-xl bg-[#f6f6f6] p-3 text-sm">Pre-order: supplier availability and delivery timing will be confirmed after checkout. If supply cannot be secured, the order will be cancelled and refunded.</p> : null}
           <div className="mt-5 flex flex-wrap items-center gap-3">
             <Qty value={qty} onChange={setQty} label={p.title} />
             <Btn
@@ -274,7 +279,7 @@ function MobileSearch() {
       <div className="mt-4 space-y-2">
         {hits.map((p) => (
           <Link key={p.handle} to={`/products/${p.handle}`} onClick={() => s.setSearchOpen(false)} className="flex items-center gap-3">
-            <img src={img(p.images[0], 120)} alt="" className="h-14 w-14 rounded-xl object-cover" referrerPolicy="no-referrer" />
+            <img src={img(p.images[0], 120)} alt="" className="h-14 w-14 rounded-xl object-cover" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = "/images/marble-product-placeholder.svg"; }} />
             <span className="font-semibold">{p.title}</span>
           </Link>
         ))}
@@ -296,7 +301,7 @@ function CompareBar() {
             if (!p) return null;
             return (
               <button key={h} type="button" className="relative" onClick={() => s.toggleCompare(h)} aria-label={`Remove ${p.title}`}>
-                <img src={img(p.images[0], 80)} alt="" className="h-12 w-12 rounded-lg object-cover" referrerPolicy="no-referrer" />
+                <img src={img(p.images[0], 80)} alt="" className="h-12 w-12 rounded-lg object-cover" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = "/images/marble-product-placeholder.svg"; }} />
               </button>
             );
           })}

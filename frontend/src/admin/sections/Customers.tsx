@@ -1,0 +1,13 @@
+import { useEffect, useState, type FormEvent } from "react";
+import { useStore } from "@/context/Store";
+import { api } from "@/lib/api";
+import { errorText, Notice, Spinner, SectionTitle, Pager, Panel, Pill } from "../components/AdminUI";
+import type { AdminCustomer, PageInfo } from "../types";
+import { pageSize } from "../types";
+function Customers() {
+  const { token } = useStore(); const [queryDraft, setQueryDraft] = useState(""); const [query, setQuery] = useState(""); const [page, setPage] = useState(1); const [customers, setCustomers] = useState<AdminCustomer[]>([]); const [pagination, setPagination] = useState<PageInfo>(); const [loading, setLoading] = useState(true); const [error, setError] = useState("");
+  useEffect(() => { if (!token) return; let active = true; const params = new URLSearchParams({ page: String(page), limit: String(pageSize) }); if (query) params.set("q", query); setLoading(true); api<{ customers: AdminCustomer[]; pagination: PageInfo }>(`/admin/customers?${params}`, { token }).then(r => { if (active) { setCustomers(r.customers); setPagination(r.pagination); } }).catch(e => { if (active) setError(errorText(e)); }).finally(() => { if (active) setLoading(false); }); return () => { active = false; }; }, [token, page, query]);
+  function submit(e: FormEvent) { e.preventDefault(); setPage(1); setQuery(queryDraft.trim()); }
+  return <><SectionTitle title="Customers" subtitle="Customer accounts are searchable and paginated; account editing is not supported by the current backend." />{error ? <Notice notice={{ kind: "error", text: error }} /> : null}<Panel><form onSubmit={submit} className="flex flex-col gap-3 sm:flex-row"><input className="admin-input flex-1" value={queryDraft} onChange={e => setQueryDraft(e.target.value)} placeholder="Search name or email" /><button className="rounded-xl border px-5 py-2.5 text-sm font-bold">Search</button></form>{loading ? <Spinner label="Loading customers" /> : customers.length ? <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[600px] text-left text-sm"><thead className="text-xs uppercase text-[#777]"><tr className="border-b"><th className="py-3">Customer</th><th>Email</th><th>Role</th><th>Joined</th></tr></thead><tbody>{customers.map(c => <tr key={c._id} className="border-b last:border-0"><td className="py-3 font-semibold">{c.name}</td><td>{c.email}</td><td><Pill>{c.role}</Pill></td><td>{new Date(c.createdAt).toLocaleDateString()}</td></tr>)}</tbody></table></div> : <p className="py-10 text-center text-sm text-[#666]">No customers found.</p>}<Pager page={page} pagination={pagination} onPage={setPage} /></Panel></>;
+}
+export default Customers;

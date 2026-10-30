@@ -10,9 +10,11 @@ async function seed() {
     const document = {
       externalId: String(item.id), handle: item.handle, title: item.title, type: item.type, tags: item.tags, images: item.images,
       options: item.options, variants: item.variants.map((v) => ({ externalId: String(v.id), title: v.title, option1: v.option1, option2: v.option2, price: v.price, compare: v.compare, available: v.available, image: v.image })),
-      description: item.desc, stock: item.stock, rating: item.rating, reviews: item.reviews, dims: item.dims, weight: item.weight, seat: item.seat, origin: item.origin, sku: item.sku,
+      description: item.desc, stock: item.stock, inventoryPolicy: item.inventoryPolicy || "stock", priceStatus: item.priceStatus || "approved", saleUnit: item.saleUnit || "piece", rating: item.rating, reviews: item.reviews, dims: item.dims, weight: item.weight, seat: item.seat, origin: item.origin, sku: item.sku,
     };
-    const result = await Product.updateOne({ handle: item.handle }, { $setOnInsert: document }, { upsert: true });
+    const result = item.inventoryPolicy === "preorder"
+      ? await Product.updateOne({ handle: item.handle }, { $set: document }, { upsert: true, runValidators: true })
+      : await Product.updateOne({ handle: item.handle }, { $setOnInsert: document }, { upsert: true });
     if (result.upsertedCount) created += 1;
   }
   console.log(`Product seed complete: ${created} created, ${source.length - created} already present.`);

@@ -1,0 +1,7 @@
+import { useStore } from "@/context/Store";
+import { SectionTitle, Panel, Pill } from "../components/AdminUI";
+function Settings() {
+  const { user, signOut } = useStore();
+  return <><SectionTitle title="Settings & account" subtitle="Account controls use the current Cortex session." /><div className="grid gap-4 lg:grid-cols-2"><Panel><h2 className="font-bold">Administrator account</h2><dl className="mt-4 space-y-3 text-sm"><div><dt className="text-[#777]">Name</dt><dd className="font-semibold">{user?.name}</dd></div><div><dt className="text-[#777]">Email</dt><dd className="font-semibold">{user?.email}</dd></div><div><dt className="text-[#777]">Role</dt><dd><Pill tone="green">{user?.role}</Pill></dd></div></dl><button onClick={signOut} className="mt-5 rounded-xl border px-4 py-2.5 text-sm font-bold">Log out</button></Panel><Panel><h2 className="font-bold">Store settings</h2><p className="mt-2 text-sm leading-6 text-[#666]">No store-settings model or admin settings endpoint exists. Payment, shipping, tax, email-service and security settings are not editable in this dashboard.</p></Panel><Panel><h2 className="font-bold">Administrator access</h2><p className="mt-2 text-sm leading-6 text-[#666]">The existing login issues a session for the stored user role. Public registration assigns the customer role; there is no public admin registration or role-promotion route. Provision administrator access through a separately controlled database operation.</p></Panel></div></>;
+}
+export default Settings;

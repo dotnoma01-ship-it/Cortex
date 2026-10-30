@@ -1,0 +1,21 @@
+.admin-input {
+  min-width: 0;
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #dedfe3;
+  border-radius: 0.75rem;
+  background: #fff;
+  padding: 0.625rem 0.75rem;
+  color: #191919;
+  outline: none;
+}
+
+.admin-input:focus {
+  border-color: #1d349a;
+  box-shadow: 0 0 0 3px rgb(29 52 154 / 10%);
+}
+
+.admin-input:disabled {
+  background: #f4f5f7;
+  color: #777;
+}

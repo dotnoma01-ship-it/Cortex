@@ -142,7 +142,7 @@ router.post("/", protect, async (req, res, next) => {
         });
       }
 
-      if (product.stock < qty) {
+      if (product.inventoryPolicy !== "preorder" && product.stock < qty) {
         return res.status(409).json({
           success: false,
           message: `${product.title} does not have enough stock.`,
@@ -156,6 +156,9 @@ router.post("/", protect, async (req, res, next) => {
         variantExternalId: variant.externalId,
         variantTitle: variant.title,
         image: variant.image || product.images[0] || "",
+        inventoryPolicy: product.inventoryPolicy || "stock",
+        priceStatus: product.priceStatus || "approved",
+        saleUnit: product.saleUnit || "piece",
         price: variant.price,
         quantity: qty,
       });
@@ -215,6 +218,7 @@ router.post("/", protect, async (req, res, next) => {
       paymentStatus: "pending",
       orderStatus: "pending",
       stockCommitted: false,
+      requiresSupplierSourcing: orderItems.some((item) => item.inventoryPolicy === "preorder"),
     });
 
     const frontendUrl = (
@@ -341,6 +345,7 @@ router.get("/verify/:reference", protect, async (req, res, next) => {
     const committedItems = [];
 
     for (const item of order.items) {
+      if (item.inventoryPolicy === "preorder") continue;
       const product = await Product.findOneAndUpdate(
         {
           _id: item.product,
@@ -373,8 +378,8 @@ router.get("/verify/:reference", protect, async (req, res, next) => {
     }
 
     order.paymentStatus = "paid";
-    order.orderStatus = "processing";
-    order.stockCommitted = true;
+    order.orderStatus = order.requiresSupplierSourcing ? "awaiting-sourcing" : "processing";
+    order.stockCommitted = committedItems.length > 0;
     await order.save();
 
     await User.updateOne(

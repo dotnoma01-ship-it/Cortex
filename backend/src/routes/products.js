@@ -4,7 +4,7 @@ const { protect, admin } = require("../middleware/auth");
 const { publicProduct } = require("../utils/product");
 const router = express.Router();
 
-const productFields = ["handle", "title", "type", "tags", "images", "options", "variants", "description", "stock", "rating", "reviews", "dims", "weight", "seat", "origin", "sku"];
+const productFields = ["handle", "title", "type", "tags", "images", "options", "variants", "description", "stock", "inventoryPolicy", "priceStatus", "saleUnit", "rating", "reviews", "dims", "weight", "seat", "origin", "sku"];
 const normalize = (body) => Object.fromEntries(productFields.filter((key) => body[key] !== undefined).map((key) => [key, key === "description" ? String(body[key]) : body[key]]));
 router.get("/", async (req, res, next) => { try {
   const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
@@ -20,5 +20,25 @@ router.get("/", async (req, res, next) => { try {
 } catch (err) { next(err); } });
 router.get("/:handle", async (req, res, next) => { try { const product = await Product.findOne({ handle: req.params.handle.toLowerCase() }); if (!product) return res.status(404).json({ success: false, message: "Product not found" }); res.json({ success: true, product: publicProduct(product) }); } catch (err) { next(err); } });
 router.post("/", protect, admin, async (req, res, next) => { try { const product = await Product.create({ ...normalize(req.body || {}), externalId: String(req.body.externalId || Date.now()) }); res.status(201).json({ success: true, product: publicProduct(product) }); } catch (err) { next(err); } });
-router.patch("/:id", protect, admin, async (req, res, next) => { try { const product = await Product.findByIdAndUpdate(req.params.id, normalize(req.body || {}), { new: true, runValidators: true }); if (!product) return res.status(404).json({ success: false, message: "Product not found" }); res.json({ success: true, product: publicProduct(product) }); } catch (err) { next(err); } });
+router.patch("/:id", protect, admin, async (req, res, next) => { try {
+  const { expectedUpdatedAt, ...body } = req.body || {};
+  if (!expectedUpdatedAt || Number.isNaN(Date.parse(expectedUpdatedAt))) return res.status(428).json({ success: false, message: "Reload this product before saving changes." });
+  const product = await Product.findOneAndUpdate(
+    { _id: req.params.id, updatedAt: new Date(expectedUpdatedAt) },
+    normalize(body),
+    { new: true, runValidators: true },
+  );
+  if (!product) {
+    const exists = await Product.exists({ _id: req.params.id });
+    return res.status(exists ? 409 : 404).json({ success: false, message: exists ? "This product changed since it was opened. Reload before saving." : "Product not found" });
+  }
+  res.json({ success: true, product: publicProduct(product) });
+} catch (err) { next(err); } });
+router.delete("/:id", protect, admin, async (req, res, next) => { try {
+  const product = await Product.findById(req.params.id);
+  if (!product) return res.status(404).json({ success: false, message: "Product not found" });
+  if (String(req.body?.confirmationHandle || "") !== product.handle) return res.status(400).json({ success: false, message: "Enter the product handle to confirm removal." });
+  await product.deleteOne();
+  res.json({ success: true, message: "Product removed." });
+} catch (err) { next(err); } });
 module.exports = router;
