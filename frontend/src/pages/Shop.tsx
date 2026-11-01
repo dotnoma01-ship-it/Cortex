@@ -86,7 +86,7 @@ export function CollectionPage() {
       )}
     >
       {layout !== "bg" && layout !== "cards" ? (
-        <img src={col.image.startsWith("http") ? col.image : file(col.image, 1800)} alt="" className="h-56 w-full object-cover sm:h-72" referrerPolicy="no-referrer" />
+        <img src={col.image.startsWith("/") || col.image.startsWith("http") ? col.image : file(col.image, 1800)} alt="" className="h-56 w-full object-cover sm:h-72" referrerPolicy="no-referrer" />
       ) : (
         <div className="h-48" />
       )}

@@ -1,7 +1,8 @@
 ﻿import { useState } from "react";
 import { Link } from "react-router-dom";
-import { CURRENCIES, LOGO } from "@/data/catalog";
+import { CURRENCIES } from "@/data/catalog";
 import { useStore } from "@/context/Store";
+import { CortexLogo } from "./CortexLogo";
 import { Social } from "./ui";
 
 export function Footer() {
@@ -97,7 +98,7 @@ export function Footer() {
       <div className="border-t border-[#eee]">
         <div className="mx-auto flex max-w-[1680px] flex-col gap-4 px-4 py-6 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-10">
           <div className="flex items-center gap-4">
-            <img src={LOGO} alt="Cortex" className="h-4" />
+            <CortexLogo className="h-4 w-auto" />
             <p className="text-sm text-[#666]">© {new Date().getFullYear()} Cortex.</p>
           </div>
           <div className="flex flex-wrap items-center gap-4 text-sm">

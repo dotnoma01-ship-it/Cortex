@@ -1,24 +1,33 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import {
   CURRENCIES,
-  LOGO,
   categoryColumns,
+  categoryRoutesByType,
   featureLinks,
   getProduct,
   img,
   pageLinks,
   products,
   rooms,
-  searchTypes,
 } from "@/data/catalog";
 import { useStore } from "@/context/Store";
+import { CortexLogo } from "./CortexLogo";
 import { Bag, Caret, CloseIcon, Heart, SearchIcon, Social, UserIcon } from "./ui";
 import { cn } from "@/utils/cn";
 
 const trending = ["arc-chair", "feast-chair", "bar-chair-sand", "swivel-table", "etruscan-jug-copy", "beam-table"]
   .map((h) => getProduct(h))
   .filter((p): p is NonNullable<typeof p> => Boolean(p));
+
+const searchCategoryTypes = [...new Set(products.map((product) => product.type))]
+  .sort((left, right) => left.localeCompare(right));
+const searchMenuCategories = ["All Categories", ...searchCategoryTypes];
+
+function categoryDestination(category: string) {
+  if (category === "All Categories") return "/collections/all";
+  return categoryRoutesByType[category] ?? `/search?type=${encodeURIComponent(category)}`;
+}
 
 const categoryRouteByType: Record<string, string> = {
   Accessories: "/collections/accessories",
@@ -65,7 +74,10 @@ export function Header() {
   const nav = useNavigate();
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("All Categories");
+  const [searchCategoriesOpen, setSearchCategoriesOpen] = useState(false);
+  const [activeSearchCategory, setActiveSearchCategory] = useState("Accessories");
   const [focus, setFocus] = useState(false);
+  const searchFormRef = useRef<HTMLFormElement>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [room, setRoom] = useState(rooms[0].label);
   const [hoveredCategory, setHoveredCategory] = useState<string | null>(null);
@@ -83,9 +95,37 @@ export function Header() {
     .filter((p) => !q.trim() || `${p.title} ${p.type} ${p.tags.join(" ")}`.toLowerCase().includes(q.toLowerCase()))
     .slice(0, 6);
 
+  const activeCategoryProducts = activeSearchCategory === "All Categories"
+    ? products
+    : products.filter((product) => product.type === activeSearchCategory);
+
+  useEffect(() => {
+    if (!searchCategoriesOpen && !focus) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && !searchFormRef.current?.contains(target)) {
+        setSearchCategoriesOpen(false);
+        setFocus(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setSearchCategoriesOpen(false);
+        setFocus(false);
+      }
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [focus, searchCategoriesOpen]);
+
   const goSearch = (e?: FormEvent) => {
     e?.preventDefault();
     setFocus(false);
+    setSearchCategoriesOpen(false);
     nav(`/search?q=${encodeURIComponent(q)}&type=${encodeURIComponent(cat)}`);
   };
 
@@ -146,36 +186,31 @@ export function Header() {
           </svg>
         </button>
         <Link to="/" className="shrink-0" aria-label="Cortex home">
-          <img src={LOGO} alt="Cortex" className="h-[22px] w-auto sm:h-[26px]" />
+          <CortexLogo className="h-[22px] w-auto sm:h-[26px]" />
         </Link>
 
         <form
+          ref={searchFormRef}
           onSubmit={goSearch}
           className="relative z-50 hidden h-12 min-w-0 flex-1 items-center rounded-full bg-[#ededed] lg:flex"
-          onFocus={() => setFocus(true)}
         >
-          <select
-            value={cat}
-            onChange={(e) => setCat(e.target.value)}
-            className="h-full max-w-[170px] rounded-l-full bg-transparent pl-5 pr-2 text-sm font-bold outline-none"
-            aria-label="Category"
-          >
-            {searchTypes.map((t) => (
-              <option key={t}>{t}</option>
-            ))}
-          </select>
+          <div className="relative h-full shrink-0" onMouseEnter={() => { setActiveSearchCategory(cat); setFocus(false); setSearchCategoriesOpen(true); }}>
+            <button type="button" aria-label="All Categories" aria-expanded={searchCategoriesOpen} aria-controls="search-category-mega-menu" onClick={() => { setActiveSearchCategory(cat); setSearchCategoriesOpen(true); setFocus(false); }} className="flex h-full max-w-[190px] items-center gap-2 rounded-l-full px-4 text-left text-sm font-bold outline-none hover:bg-black/[0.03] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1d349a]">
+              <span className="max-w-[145px] truncate">{cat}</span><Caret className="shrink-0" />
+            </button>
+          </div>
           <span className="h-5 w-px bg-black/10" />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            onFocus={() => setFocus(true)}
+            onFocus={() => { setFocus(true); setSearchCategoriesOpen(false); }}
             placeholder="Search"
             className="h-full min-w-0 flex-1 bg-transparent px-4 text-sm outline-none"
           />
           <button type="submit" aria-label="Search" className="mr-1.5 grid h-9 w-9 place-items-center rounded-full">
             <SearchIcon />
           </button>
-          {focus ? (
+          {focus && !searchCategoriesOpen ? (
             <div className="absolute left-0 right-0 top-[calc(100%+10px)] z-50 rounded-3xl border border-[#eee] bg-white p-5 shadow-2xl">
               <div className="mb-3 flex items-center justify-between">
                 <p className="text-sm font-bold">{q ? "Products" : "Most searched products"}</p>
@@ -219,6 +254,38 @@ export function Header() {
               </div>
             </div>
           ) : null}
+          <div id="search-category-mega-menu" aria-hidden={!searchCategoriesOpen} className={cn("absolute left-0 top-[calc(100%+12px)] z-[70] w-full max-w-[940px] overflow-hidden rounded-2xl border border-[#e7e7e7] bg-white shadow-[0_24px_70px_rgba(0,0,0,.18)] transition-[opacity,transform,visibility] duration-200 ease-out motion-reduce:transition-none", searchCategoriesOpen ? "visible translate-y-0 opacity-100" : "invisible -translate-y-2 opacity-0 pointer-events-none")}>
+            <div className="grid max-h-[min(620px,calc(100dvh-180px))] min-h-[360px] grid-cols-[150px_minmax(0,1fr)] sm:grid-cols-[200px_minmax(0,1fr)]">
+              <div className="overflow-y-auto border-r border-[#eee] bg-[#fafafa] py-2" aria-label="Product categories">
+                {searchMenuCategories.map((category) => (
+                  <div key={category} onMouseEnter={() => setActiveSearchCategory(category)} className={cn("flex items-center gap-1 border-r-2 px-2 py-1.5 transition-colors duration-150 hover:bg-white sm:px-3", activeSearchCategory === category ? "border-[#1d349a] bg-white text-[#1d349a]" : "border-transparent text-[#444]")}>
+                    <Link to={categoryDestination(category)} onClick={() => { setCat(category); setSearchCategoriesOpen(false); setFocus(false); }} className="min-w-0 flex-1 truncate px-2 py-1 text-left text-xs font-semibold hover:text-[#1d349a] sm:text-sm">{category}</Link>
+                    <button type="button" aria-label={`Show products in ${category}`} aria-pressed={activeSearchCategory === category} onFocus={() => setActiveSearchCategory(category)} onClick={() => { setActiveSearchCategory(category); setCat(category); }} className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-[#777] hover:bg-[#f1f1f1] hover:text-[#1d349a] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#1d349a]">
+                      <Caret className="h-3 w-3 -rotate-90" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex min-w-0 flex-col p-3 sm:p-5">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-base font-bold sm:text-lg">{activeSearchCategory}</p>
+                    <p className="text-[11px] text-[#777] sm:text-xs">{activeCategoryProducts.length} products</p>
+                  </div>
+                  <Link to={categoryDestination(activeSearchCategory)} onClick={() => { setCat(activeSearchCategory); setSearchCategoriesOpen(false); setFocus(false); }} className="shrink-0 text-xs font-bold text-[#1d349a] underline sm:text-sm">View All</Link>
+                </div>
+                <div key={activeSearchCategory} className="search-category-products grid min-h-0 flex-1 grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3 sm:gap-3">
+                  {activeCategoryProducts.map((product) => (
+                    <Link key={product.handle} to={`/products/${product.handle}`} onClick={() => { setCat(activeSearchCategory); setSearchCategoriesOpen(false); setFocus(false); }} className="group min-w-0 overflow-hidden rounded-lg border border-[#eee] bg-white transition duration-200 hover:-translate-y-0.5 hover:border-[#1d349a]/40 hover:shadow-[0_8px_20px_rgba(17,17,17,.10)] motion-reduce:transition-none motion-reduce:hover:translate-y-0">
+                      <div className="aspect-[4/3] overflow-hidden bg-[#f3f3f3]"><img src={img(product.images[0], 300)} alt={product.title} loading="lazy" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.04] motion-reduce:transition-none motion-reduce:group-hover:scale-100" referrerPolicy="no-referrer" /></div>
+                      <p className="line-clamp-2 px-2 py-1.5 text-[10px] font-semibold leading-snug group-hover:text-[#1d349a] sm:px-2.5 sm:text-xs">{product.title}</p>
+                    </Link>
+                  ))}
+                  {activeCategoryProducts.length === 0 ? <p className="col-span-full self-center text-sm text-[#666]">No products in this category yet.</p> : null}
+                </div>
+              </div>
+            </div>
+          </div>
         </form>
 
         <div className="ml-auto flex items-center gap-1 sm:gap-2">
@@ -489,7 +556,7 @@ export function MobileMenu() {
       <button className="absolute inset-0 bg-black/40" aria-label="Close menu" onClick={() => store.setMenuOpen(false)} />
       <div className="absolute inset-y-0 left-0 flex w-[min(100%,380px)] flex-col bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b px-5 py-4">
-          <img src={LOGO} alt="Cortex" className="h-5" />
+          <CortexLogo className="h-5 w-auto" />
           <button type="button" aria-label="Close" onClick={() => store.setMenuOpen(false)}>
             <CloseIcon />
           </button>

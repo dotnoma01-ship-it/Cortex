@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   colorOption,
+  categoryRoutesByType,
   findVariant,
   pickVariant,
   priceUnitLabel,
@@ -253,36 +254,85 @@ function MobileSearch() {
   const s = useStore();
   const nav = useNavigate();
   const [q, setQ] = useState("");
+  const [category, setCategory] = useState("All Categories");
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const categoryPickerRef = useRef<HTMLDivElement>(null);
+  const categoryTypes = ["All Categories", ...new Set(products.map((product) => product.type).sort((a, b) => a.localeCompare(b)))];
   const hits = useMemo(
     () =>
       products
-        .filter((p) => `${p.title} ${p.type}`.toLowerCase().includes(q.toLowerCase()))
-        .slice(0, 8),
-    [q],
+        .filter((product) => category === "All Categories" || product.type === category)
+        .filter((product) => `${product.title} ${product.type}`.toLowerCase().includes(q.toLowerCase()))
+        .slice(0, 24),
+    [category, q],
   );
+
+  useEffect(() => {
+    if (!categoriesOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && !categoryPickerRef.current?.contains(target)) setCategoriesOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setCategoriesOpen(false);
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [categoriesOpen]);
+
   if (!s.searchOpen) return null;
   return (
-    <div className="fixed inset-0 z-[60] bg-white p-4">
+    <div className="fixed inset-0 z-[60] flex flex-col bg-white p-4">
       <form
-        className="flex items-center gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
+        className="flex shrink-0 items-center gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
           s.setSearchOpen(false);
-          nav(`/search?q=${encodeURIComponent(q)}`);
+          nav(`/search?q=${encodeURIComponent(q)}&type=${encodeURIComponent(category)}`);
         }}
       >
-        <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search" className="h-12 flex-1 rounded-full bg-[#ededed] px-5 outline-none" />
+        <input autoFocus value={q} onChange={(event) => setQ(event.target.value)} placeholder="Search" className="h-12 min-w-0 flex-1 rounded-full bg-[#ededed] px-5 outline-none" />
         <button type="button" aria-label="Close search" onClick={() => s.setSearchOpen(false)}>
           <CloseIcon />
         </button>
       </form>
-      <div className="mt-4 space-y-2">
-        {hits.map((p) => (
-          <Link key={p.handle} to={`/products/${p.handle}`} onClick={() => s.setSearchOpen(false)} className="flex items-center gap-3">
-            <img src={img(p.images[0], 120)} alt="" className="h-14 w-14 rounded-xl object-cover" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = "/images/marble-product-placeholder.svg"; }} />
-            <span className="font-semibold">{p.title}</span>
-          </Link>
-        ))}
+      <div ref={categoryPickerRef} className="relative z-10 mt-3 shrink-0">
+        <button type="button" aria-expanded={categoriesOpen} onClick={() => setCategoriesOpen((open) => !open)} className="flex h-11 w-full items-center justify-between rounded-xl border border-[#e5e5e5] px-3 text-left text-sm font-bold">
+          <span>{category}</span><span className="text-[#666]">{categoriesOpen ? "Close" : "Browse categories"}</span>
+        </button>
+        {categoriesOpen ? (
+          <div className="absolute inset-x-0 top-[calc(100%+6px)] max-h-[42vh] overflow-y-auto rounded-xl border border-[#e5e5e5] bg-white p-2 shadow-xl">
+            <div className="grid grid-cols-2 gap-1">
+              {categoryTypes.map((type) => (
+                <button key={type} type="button" onClick={() => { setCategory(type); setCategoriesOpen(false); }} className={`rounded-lg px-3 py-2 text-left text-sm ${category === type ? "bg-[#1d349a] font-bold text-white" : "hover:bg-[#f3f3f3]"}`}>
+                  {type}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
+      <div className="mt-4 flex min-h-0 flex-1 flex-col">
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <p className="text-sm font-bold">{category === "All Categories" ? "Products" : category} <span className="font-normal text-[#777]">({hits.length}{hits.length === 24 ? "+" : ""})</span></p>
+          <Link to={category === "All Categories" ? "/collections/all" : categoryRoutesByType[category] ?? `/search?type=${encodeURIComponent(category)}`} onClick={() => s.setSearchOpen(false)} className="text-xs font-bold text-[#1d349a] underline">View All</Link>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {hits.length ? (
+            <div className="grid grid-cols-2 gap-3">
+              {hits.map((product) => (
+                <Link key={product.handle} to={`/products/${product.handle}`} onClick={() => s.setSearchOpen(false)} className="overflow-hidden rounded-xl border border-[#eee] bg-white">
+                  <div className="aspect-[4/3] overflow-hidden bg-[#f3f3f3]"><img src={img(product.images[0], 360)} alt={product.title} loading="lazy" className="h-full w-full object-cover" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = "/images/marble-product-placeholder.svg"; }} /></div>
+                  <p className="line-clamp-2 px-2.5 py-2 text-xs font-semibold leading-snug">{product.title}</p>
+                </Link>
+              ))}
+            </div>
+          ) : <p className="py-8 text-center text-sm text-[#666]">No products match this category and search.</p>}
+        </div>
       </div>
     </div>
   );

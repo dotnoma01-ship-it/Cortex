@@ -52,8 +52,6 @@ export function file(name: string, w = 14000) {
   return `${FILE}/${name}?width=${w}`;
 }
 
-export const LOGO = "/images/image copy.png";
-
 export const COLORS: Record<string, string> = {
   "Light Beige": "#E6D5C1",
   Yellow: "#E2B23C",
@@ -201,7 +199,7 @@ export const collections: Collection[] = [
   {
     handle: "sale-items",
     title: "Sale Items",
-    image: "collection-sales.webp",
+    image: "/images/flash-sale-banner.svg",
     blurb: "Studio pieces currently marked down. Same materials, a sharper number.",
     match: isSale,
   },
@@ -396,6 +394,30 @@ export function collectionProducts(handle?: string) {
 
 export type NavLink = { label: string; to: string };
 export type NavColumn = { title: string; links: NavLink[] };
+
+export const categoryRoutesByType: Record<string, string> = {
+  Accessories: "/collections/accessories",
+  Armchairs: "/collections/bend-chairs",
+  "Bar Stools": "/collections/bar-chairs",
+  Bowls: "/collections/accessories",
+  Candles: "/collections/candles",
+  Chairs: "/collections/chairs",
+  Desks: "/collections/desks",
+  Home: "/search?type=Home",
+  Lamps: "/collections/lighting",
+  "Marble Products": "/pages/marble-products",
+  Ottomans: "/collections/soft-stools",
+  Pillows: "/collections/accessories",
+  Planters: "/collections/outdoor",
+  "Rack Wall": "/collections/storage",
+  Rugs: "/collections/rugs",
+  Sofa: "/collections/sofas",
+  Sofas: "/collections/sofas",
+  Tables: "/collections/tables",
+  Towels: "/collections/accessories",
+  Vases: "/collections/accessories",
+  "Floating Wall": "/collections/storage",
+};
 
 export const categoryColumns: NavColumn[] = [
   {

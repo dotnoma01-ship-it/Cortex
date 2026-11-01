@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="330" height="265" viewBox="220 250 330 265" fill="none">
+  <g fill="#000">
+    <path d="M231 290h226l80 33v35H303l-72-30z"/>
+    <path d="m231 412 225-40h81v35l-234 35-72-13z"/>
+    <path d="M231 457h226l80 16v33H303l-72-16z"/>
+  </g>
+  <circle cx="522" cy="278" r="18" stroke="#000" stroke-width="4"/>
+  <text x="522" y="287" fill="#000" font-family="Arial, sans-serif" font-size="25" font-weight="700" text-anchor="middle">R</text>
+</svg>
