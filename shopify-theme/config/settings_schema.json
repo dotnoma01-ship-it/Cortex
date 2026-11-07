@@ -1,0 +1,44 @@
+[
+  {
+    "name": "theme_info",
+    "theme_name": "Cortex",
+    "theme_version": "1.0.0",
+    "theme_author": "Cortex",
+    "theme_documentation_url": "https://help.shopify.com/en/manual/online-store/themes",
+    "theme_support_url": "https://help.shopify.com/"
+  },
+  {
+    "name": "Brand",
+    "settings": [
+      {
+        "type": "color",
+        "id": "ink",
+        "label": "Text",
+        "default": "#111111"
+      },
+      {
+        "type": "color",
+        "id": "accent",
+        "label": "Accent",
+        "default": "#1d349a"
+      },
+      {
+        "type": "color",
+        "id": "flash",
+        "label": "Sale banner",
+        "default": "#f4f691"
+      },
+      {
+        "type": "text",
+        "id": "announcement",
+        "label": "Announcement",
+        "default": "Thoughtful pieces for considered spaces"
+      },
+      {
+        "type": "image_picker",
+        "id": "logo",
+        "label": "Logo"
+      }
+    ]
+  }
+]
