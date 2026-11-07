@@ -1,0 +1,32 @@
+name: Build Shopify theme ZIP
+on:
+  push:
+    branches: [shopify-theme-build]
+    paths:
+      - 'shopify-theme/**'
+      - '.github/workflows/build-shopify-theme.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: write
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate theme JSON
+        run: |
+          python - <<'PY'
+          import json, pathlib
+          root=pathlib.Path('shopify-theme')
+          for p in list((root/'config').glob('*.json'))+list((root/'templates').glob('*.json')):
+              json.loads(p.read_text())
+              print('JSON OK:',p)
+          PY
+      - name: Package uploadable theme
+        run: cd shopify-theme && zip -qr ../cortex-shopify-theme.zip .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cortex-shopify-theme
+          path: cortex-shopify-theme.zip
+          retention-days: 14
