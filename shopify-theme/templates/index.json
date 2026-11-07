@@ -1,0 +1,97 @@
+{
+  "sections": {
+    "categories": {
+      "type": "category-circles",
+      "blocks": {
+        "c1": {
+          "type": "category",
+          "settings": {
+            "title": "Chairs"
+          }
+        },
+        "c2": {
+          "type": "category",
+          "settings": {
+            "title": "Sofas"
+          }
+        },
+        "c3": {
+          "type": "category",
+          "settings": {
+            "title": "Tables"
+          }
+        },
+        "c4": {
+          "type": "category",
+          "settings": {
+            "title": "Lighting"
+          }
+        },
+        "c5": {
+          "type": "category",
+          "settings": {
+            "title": "Accessories"
+          }
+        }
+      },
+      "block_order": [
+        "c1",
+        "c2",
+        "c3",
+        "c4",
+        "c5"
+      ],
+      "settings": {}
+    },
+    "hero": {
+      "type": "hero",
+      "blocks": {
+        "s1": {
+          "type": "slide",
+          "settings": {
+            "kicker": "Modern elegance",
+            "title": "Spoke Sofa",
+            "button_label": "Shop collection"
+          }
+        },
+        "s2": {
+          "type": "slide",
+          "settings": {
+            "kicker": "Contemporary grace",
+            "title": "Dining & Kitchen",
+            "button_label": "Explore the edit"
+          }
+        }
+      },
+      "block_order": [
+        "s1",
+        "s2"
+      ],
+      "settings": {}
+    },
+    "arrivals": {
+      "type": "featured-collection",
+      "settings": {
+        "eyebrow": "The considered edit",
+        "title": "New Arrivals",
+        "subtitle": "Traditional divides between personal and professional space.",
+        "limit": 4
+      }
+    },
+    "promo": {
+      "type": "promo-banner",
+      "settings": {}
+    },
+    "editorial": {
+      "type": "image-editorial",
+      "settings": {}
+    }
+  },
+  "order": [
+    "categories",
+    "hero",
+    "arrivals",
+    "promo",
+    "editorial"
+  ]
+}
