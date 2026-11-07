@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="{{ request.locale.iso_code }}">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{ page_title }}{% if current_tags %} — {{ current_tags | join: ', ' }}{% endif %}{% unless page_title contains shop.name %} — {{ shop.name }}{% endunless %}</title>
+{% if page_description %}<meta name="description" content="{{ page_description | escape }}">{% endif %}
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+{{ content_for_header }}
+{{ 'cortex.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'cortex.js' | asset_url }}" defer></script>
+</head>
+<body>
+{% section 'announcement-bar' %}
+{% section 'header' %}
+<main id="MainContent" role="main">{{ content_for_layout }}</main>
+{% section 'footer' %}
+<div class="toast" data-toast role="status" aria-live="polite"></div>
+</body></html>
