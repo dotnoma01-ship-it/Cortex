@@ -1,0 +1,8 @@
+<header class="site-header">
+  <a class="brand" href="{{ routes.root_url }}">{{ shop.name | default: 'CORTEX' }}</a>
+  <nav class="desktop-nav" aria-label="Main navigation">
+    {% for link in section.settings.menu.links %}<a href="{{ link.url }}">{{ link.title }}</a>{% endfor %}
+  </nav>
+  <div class="header-actions"><a href="{{ routes.search_url }}">Search</a><a href="{{ routes.account_url }}">Account</a><a href="{{ routes.cart_url }}">Bag ({{ cart.item_count }})</a><button class="menu-toggle" aria-expanded="false" aria-label="Open menu">☰</button></div>
+</header>
+{% schema %}{"name":"Header","settings":[{"type":"link_list","id":"menu","label":"Main menu"}]}{% endschema %}
