@@ -1,0 +1,2 @@
+<footer class="site-footer"><div><a class="brand" href="{{ routes.root_url }}">{{ shop.name }}</a><p>{{ section.settings.note }}</p></div><div>{% for link in section.settings.menu.links %}<a href="{{ link.url }}">{{ link.title }}</a>{% endfor %}</div><small>© {{ 'now' | date: '%Y' }} {{ shop.name }}.</small></footer>
+{% schema %}{"name":"Footer","settings":[{"type":"text","id":"note","label":"Footer text","default":"Designed for living."},{"type":"link_list","id":"menu","label":"Footer menu"}]}{% endschema %}
